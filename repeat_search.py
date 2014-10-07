@@ -1,5 +1,8 @@
 #! /usr/bin/env python
 
+# all hail Alex Ford
+from interface_fragment_matching.utility.analysis import AtomicSasaCalculator
+
 from multiprocessing import Process
 from scipy import spatial
 
@@ -13,7 +16,7 @@ import rosetta
 rosetta.init()
 
 ThreeToOne = {'GLY':'G','ALA':'A','VAL':'V','LEU':'L','ILE':'I','MET':'M','PRO':'P','PHE':'F','TRP':'W','SER':'S','THR':'T','ASN':'N','GLN':'Q','TYR':'Y','CYS':'C','CYD':'C','LYS':'K','ARG':'R','HIS':'H','ASP':'D','GLU':'E','STO':'*','UNK':'U'}
-
+ChainAlphabetIndices = {'A':1, 'B':2, 'C':3, 'D':4, 'E':5, 'F':6, 'G':7, 'H':8, 'I':9, 'J':10, 'K':11, 'L':12, 'M':13, 'N':14, 'O':15, 'P':16, 'Q':17, 'R':18, 'S':19, 'T':20, 'U':21, 'V':22, 'W':23, 'X':24, 'Y':25, 'Z':26 }
 
 class alpha_carbon:
 	""" Calpha node for wDAG searches of proteins for repeats """
@@ -116,6 +119,7 @@ class pdb_wdag:
 			assert len(Pdb) == 4, 'Pdb ID must equal 4 or 5'
 			Chain = '.'
 
+		# gets full path to pdb in lab database
 		PdbfullPath = ''.join( ['/lab/databases/pdb_clean/', Pdb[1:3].lower(), '/', Pdb, '.pdb'] )
 
 		CalphaLines = subprocess.check_output(['grep', 'ATOM.........CA......%s'%Chain, PdbfullPath]).strip('\n').split('\n')
@@ -138,12 +142,47 @@ def score_repeats(RepeatChains, AminoAcidIdentityDict, AminoAcidScoreMatrix):
 
 
 
-# def check_sasa(Pdb, RepeatChains, MinValue, LogFile):
-# 	PdbfullPath = ''.join( ['/lab/databases/pdb_clean/', Pdb[1:3].lower(), '/', Pdb, '.pdb'] )
+def check_sasa(Pdb, ResidueSubsets, StartingResidue, SasaProbeRadius):
+	''' Uses Alex's AtomicSasaCalculator to calculate average SASA (surface area solvent accessibility) for residue sets input '''
+	PdbfullPath = ''.join( ['/lab/databases/pdb_clean/', Pdb[1:3].lower(), '/', Pdb[0:4], '.pdb'] )
+	
+	# Load pdb into a rosetta pose object 
+	PdbPose = rosetta.pose_from_pdb(PdbfullPath)
 
-# 	Pose = rosetta.pose_from_pdb(PdbfullPath)
-# 	# print 'hello', name
+	if len(Pdb) > 4:
+		TargetChainIndex = ChainAlphabetIndices[Pdb[4]]
+		PdbChains = PdbPose.split_by_chain()
+		# Silly loop to get pose with only the desired chain, there probably is a better way to do this
+		for i, Chain in enumerate(PdbChains):
+			if i == TargetChainIndex:
+				PdbPose = Chain
+				break
 
+	# initalize Alex's AtomicSasaCalculator
+	SasaCalculator = AtomicSasaCalculator(probe_radius=SasaProbeRadius)
+	# get array of residue sasa's
+	ResidueSasa = SasaCalculator.calculate_per_residue_sasa(PdbPose)
+
+	SubsetAverageSasas = []
+	# RepeatMinimumSasas = []
+	# RepeatMaximumSasas = []
+
+	count = 0
+	for Residues in ResidueSubsets:
+		# Converts residue number from pdb to appropriate index for sasa array
+		ResidueIndices = [ResNum - StartingResidue for ResNum in Residues]
+		print
+		print 'select rep%d, resi'%count, '+'.join([str(R) for R in Residues])
+		print [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ]
+		print np.mean( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] )
+		
+		SubsetAverageSasas.append( np.mean( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] ) )
+		# RepeatMinimumSasas.append( min( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] ) )
+		# RepeatMaximumSasas.append( max( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] ) )
+
+		count += 1
+	
+	return SubsetAverageSasas
 
 
 
@@ -162,7 +201,9 @@ def main(argv=None):
 	ArgParser.add_argument('-dist_flex',  type=float, default=0.5, help=' neighboring repeat spacing flexibility ')
 	ArgParser.add_argument('-angle_flex', type=float, default=5.0, help=' maximum cosine (in degrees) difference between displacement vectors considered repeatative ')
 	ArgParser.add_argument('-min_repeats', type=int, default=5, help=' mimium number of repeats to record ')
-
+	ArgParser.add_argument('-min_sasa',  type=float, default=0.0,  help=' minimum average residue sasa value for reported repeats ')
+	ArgParser.add_argument('-max_sasa',  type=float, default=5000.0,  help=' maximum average residue sasa value for reported repeats ')
+	ArgParser.add_argument('-sasa_probe_radius', type=float, default=2.2,  help=' probe radius for sasa calculations ')
 	args = ArgParser.parse_args()
 
 	# checks for output folder and makes it if not found
@@ -198,21 +239,25 @@ def main(argv=None):
 	print '# outputing results to: %s'%args.outfolder
 
 	for Pdb in PdbList:
+		
 		PdbWDAG = pdb_wdag(Pdb, args.min_repeats, args.dist_targ, args.dist_flex, args.angle_flex )
 		
 		PdbWDAG.find_downstream_neighbors()
 		RepeatChains = PdbWDAG.find_repeat_chains()
 				
 		ScoredRepeats = score_repeats(RepeatChains, PdbWDAG.ResidueIndentityDict, AminoAcidScoreMatrix)
-		print
+		print '\n'*2
+		print Pdb
+		ChainAverageSasas = check_sasa(Pdb, RepeatChains, PdbWDAG.CalphaArray[0][0], args.sasa_probe_radius)
+
+		# print StartingResidue
 		print ScoredRepeats
+		print ChainAverageSasas
 
-
-
-		if __name__ == '__main__':
-		    p = Process(target=check_sasa, args=(Pdb, RepeatChains, MinValue, LogFile))
-		    p.start()
-		    p.join()
+		# if __name__ == '__main__':
+		#     p = Process(target=check_sasa, args=(Pdb, RepeatChains, MinValue, LogFile))
+		#     p.start()
+		#     p.join()
 	
 		# for Calpha in PdbWDAG.CalphaInstances:
 		# 	print Calpha.Number, 
