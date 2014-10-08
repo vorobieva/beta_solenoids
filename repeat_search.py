@@ -130,19 +130,20 @@ class pdb_wdag:
 
 
 
-def score_repeats(RepeatChains, AminoAcidIdentityDict, AminoAcidScoreMatrix):
-	SortingRepeats = []
+def score_repeat_composition(RepeatChains, AminoAcidIdentityDict, AminoAcidScoreMatrix):
+	RepeatCompositions = []
+	RepeatScores = []
 	for Repeat in RepeatChains:
 		ResidueIDs = [ AminoAcidIdentityDict[Number] for Number in Repeat ]
+		RepeatCompositions.append( ResidueIDs )
 		Score = np.sum( [ AminoAcidScoreMatrix[Residue] for Residue in ResidueIDs] )
-		SortingRepeats.append( [Score, ResidueIDs, Repeat] )
-	SortingRepeats.sort()
-	SortingRepeats.reverse()
-	return SortingRepeats
+		RepeatScores.append( Score )
+		
+	return (RepeatCompositions, RepeatScores)
 
 
 
-def check_sasa(Pdb, ResidueSubsets, StartingResidue, SasaProbeRadius):
+def check_sasa(Pdb, ResidueSubsets, StartingResidue, LastResidue, SasaProbeRadius):
 	''' Uses Alex's AtomicSasaCalculator to calculate average SASA (surface area solvent accessibility) for residue sets input '''
 	PdbfullPath = ''.join( ['/lab/databases/pdb_clean/', Pdb[1:3].lower(), '/', Pdb[0:4], '.pdb'] )
 	
@@ -158,6 +159,11 @@ def check_sasa(Pdb, ResidueSubsets, StartingResidue, SasaProbeRadius):
 				PdbPose = Chain
 				break
 
+	# print LastResidue - StartingResidue, PdbPose.n_residue()
+	if (LastResidue - StartingResidue + 1) != PdbPose.n_residue():
+		print 'Pose werid, returning bogus SASA values'
+		return [999.999 for Set in ResidueSubsets]
+
 	# initalize Alex's AtomicSasaCalculator
 	SasaCalculator = AtomicSasaCalculator(probe_radius=SasaProbeRadius)
 	# get array of residue sasa's
@@ -167,15 +173,16 @@ def check_sasa(Pdb, ResidueSubsets, StartingResidue, SasaProbeRadius):
 	# RepeatMinimumSasas = []
 	# RepeatMaximumSasas = []
 
+	# print PdbPose.n_residue()
+	# print len(ResidueSasa)
+
 	count = 0
 	for Residues in ResidueSubsets:
 		# Converts residue number from pdb to appropriate index for sasa array
 		ResidueIndices = [ResNum - StartingResidue for ResNum in Residues]
-		print
-		print 'select rep%d, resi'%count, '+'.join([str(R) for R in Residues])
-		print [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ]
-		print np.mean( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] )
-		
+		# print ResidueIndices
+		# print Residues
+
 		SubsetAverageSasas.append( np.mean( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] ) )
 		# RepeatMinimumSasas.append( min( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] ) )
 		# RepeatMaximumSasas.append( max( [ ResidueSasa[ResIndex] for ResIndex in ResidueIndices ] ) )
@@ -184,6 +191,8 @@ def check_sasa(Pdb, ResidueSubsets, StartingResidue, SasaProbeRadius):
 	
 	return SubsetAverageSasas
 
+def pymol_commands(Pdb, Repeat, ReportedRepeatCount):
+	return 'fetch %s\tselect rep%d, resi %s'%( Pdb, ReportedRepeatCount, '+'.join([str(Res) for Res in Repeat]) )
 
 
 def main(argv=None):
@@ -193,7 +202,7 @@ def main(argv=None):
 	ArgParser = argparse.ArgumentParser(description=' repeat_search.py arguments ')
 	# Required arguments:
 	ArgParser.add_argument('-pdbs', type=str, help=' pdb ID list to check ', required=True)
-	ArgParser.add_argument('-outfolder', type=str, help=' output directory ', required=True)
+	ArgParser.add_argument('-output', type=str, help=' output directory ', required=True)
 	ArgParser.add_argument('-aa_matrix', type=str, help=' weight matrix for amino acid types to rank repeat rows based on desired amino acid composition ', required=True)
 	# Optional arguments:
 	ArgParser.add_argument('-repeat_class', type=str, default=False, help=' type of repeat a la repeatsdb.bio.unipd, e.g. "III.1" ')
@@ -201,16 +210,17 @@ def main(argv=None):
 	ArgParser.add_argument('-dist_flex',  type=float, default=0.5, help=' neighboring repeat spacing flexibility ')
 	ArgParser.add_argument('-angle_flex', type=float, default=5.0, help=' maximum cosine (in degrees) difference between displacement vectors considered repeatative ')
 	ArgParser.add_argument('-min_repeats', type=int, default=5, help=' mimium number of repeats to record ')
-	ArgParser.add_argument('-min_sasa',  type=float, default=0.0,  help=' minimum average residue sasa value for reported repeats ')
-	ArgParser.add_argument('-max_sasa',  type=float, default=5000.0,  help=' maximum average residue sasa value for reported repeats ')
+
+	ArgParser.add_argument('-min_aa_score',  type=float, default=20.0,  help=' minimum AA composition sum based on scores in matrix ')
+
+	ArgParser.add_argument('-min_sasa',  type=float, default=15.0,  help=' minimum average residue sasa value for reported repeats ')
+	ArgParser.add_argument('-max_sasa',  type=float, default=50000.0,  help=' maximum average residue sasa value for reported repeats ')
 	ArgParser.add_argument('-sasa_probe_radius', type=float, default=2.2,  help=' probe radius for sasa calculations ')
+	
 	args = ArgParser.parse_args()
 
-	# checks for output folder and makes it if not found
-	if not os.path.isdir(args.outfolder):
-		subprocess.check_output(['mkdir', args.outfolder])
 	
-	# parses aa matrix
+	# parses aa scoring matrix
 	with open(args.aa_matrix, 'r') as MatrixFile:
 		MatrixLines = MatrixFile.readlines()
 		assert len(MatrixLines) == 20, '%s contains %d lines, matrix must have 20 entries (all amino acids)'%(args.aa_matrix, len(MatrixLines) )
@@ -230,40 +240,53 @@ def main(argv=None):
 	else:
 		PdbList = [ SplitPdb[0] for SplitPdb in PdbList ]
 	
-	# output values for log
-	print '# Beginning search of %d structures for repeats with:'%len(PdbList)
-	print '# target spacing: %f'%args.dist_targ
-	print '# spacing flexibility (+-): %f'%args.dist_flex
-	print '# angle flexibility: %f'%args.angle_flex
-	print '# minimum repeats: %d'%args.min_repeats
-	print '# outputing results to: %s'%args.outfolder
+	with open(args.output, 'w') as Logfile:
+		# output values for log
+		print>>Logfile, '# Beginning search of %d structures for repeats with:'%len(PdbList)
+		print>>Logfile, '# target spacing: %f'%args.dist_targ
+		print>>Logfile, '# spacing flexibility (+-): %f'%args.dist_flex
+		print>>Logfile, '# angle flexibility: %f'%args.angle_flex
+		print>>Logfile, '# minimum repeats: %d'%args.min_repeats
+		print>>Logfile, '# minimum AA score: %d'%args.min_aa_score
+		print>>Logfile, '# SASA probe radius: %d'%args.sasa_probe_radius
+		print>>Logfile, '# minimum SASA: %d'%args.min_sasa
+		print>>Logfile, '# maximum SASA: %d'%args.max_sasa
+		print>>Logfile, '\n'*3
+		print>>Logfile, 'Pdb\tAvgSASA\tAAscore\tAminoAcids\tResidueNumbers\tPymolCommands...'
 
-	for Pdb in PdbList:
+	ReportedRepeatCount = 0
+	TotalPdbs = len(PdbList)
+	for iPdb, Pdb in enumerate(PdbList):
+		
+		print 'Looking at %s; %d of %d total pdbs'%(Pdb, iPdb+1, TotalPdbs)
 		
 		PdbWDAG = pdb_wdag(Pdb, args.min_repeats, args.dist_targ, args.dist_flex, args.angle_flex )
 		
 		PdbWDAG.find_downstream_neighbors()
 		RepeatChains = PdbWDAG.find_repeat_chains()
 				
-		ScoredRepeats = score_repeats(RepeatChains, PdbWDAG.ResidueIndentityDict, AminoAcidScoreMatrix)
-		print '\n'*2
-		print Pdb
-		ChainAverageSasas = check_sasa(Pdb, RepeatChains, PdbWDAG.CalphaArray[0][0], args.sasa_probe_radius)
+		RepeatCompositions, RepeatCompScores = score_repeat_composition(RepeatChains, PdbWDAG.ResidueIndentityDict, AminoAcidScoreMatrix)
 
-		# print StartingResidue
-		print ScoredRepeats
-		print ChainAverageSasas
+		PrunedRepeatChains = []
+		PrunedRepeatCompositions = []
+		PrunedRepeatCompScores = []
+		for i, Repeat in enumerate(RepeatChains):
+			if RepeatCompScores[i] >= args.min_aa_score:
+				PrunedRepeatChains.append( Repeat )
+				PrunedRepeatCompositions.append( RepeatCompositions[i] )
+				PrunedRepeatCompScores.append( RepeatCompScores[i] )
+		
+		# only checks sasa of repeat chains with adequetely scoreing a.a. compositions
+		ChainAverageSasas = check_sasa(Pdb, PrunedRepeatChains, PdbWDAG.CalphaArray[0][0], PdbWDAG.CalphaArray[-1][0], args.sasa_probe_radius)
 
-		# if __name__ == '__main__':
-		#     p = Process(target=check_sasa, args=(Pdb, RepeatChains, MinValue, LogFile))
-		#     p.start()
-		#     p.join()
-	
-		# for Calpha in PdbWDAG.CalphaInstances:
-		# 	print Calpha.Number, 
-		# 	print Calpha.DownstreamNeighbors
+		if ChainAverageSasas:
+			for j, Repeat in enumerate(PrunedRepeatChains):
+				if ChainAverageSasas[j] >= args.min_sasa:
+					if ChainAverageSasas[j] <= args.max_sasa:
+						ReportedRepeatCount += 1
+						with open(args.output, 'a') as Logfile:
+							print>>Logfile, '\t'.join([ Pdb, '%.2f'%ChainAverageSasas[j], str(PrunedRepeatCompScores[j]), ','.join(PrunedRepeatCompositions[j]), ','.join([str(Res) for Res in Repeat]), pymol_commands(Pdb, Repeat, ReportedRepeatCount) ])
 
-	# calc_total_sasa(pose, 1.5)
 
 
 if __name__ == "__main__":
