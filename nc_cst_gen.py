@@ -49,13 +49,13 @@ class sasa_scale:
       self.WeightRangeMag = CeilingWeight - FloorWeight
 
   def weigh(self, SasaToWeigh):
-    if SasaToWeigh <= FloorSasa:
+    if SasaToWeigh <= self.FloorSasa:
       return self.FloorWeight
-    elif SasaToWeigh >= Ceiling:
+    elif SasaToWeigh >= self.CeilingSasa:
       return self.CeilingWeight
     else:
       Proportion =  (SasaToWeigh - self.FloorSasa) / self.SasaRangeMag
-      return (self.WeightRangeMag * Proportion) + FloorWeight
+      return (self.WeightRangeMag * Proportion) + self.FloorWeight
 
 
 def consolidate_repeats(ListOfRepeatPositions):
@@ -104,57 +104,11 @@ def consolidate_repeats(ListOfRepeatPositions):
   MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
   return MaxNumberRepeatStarts, TandemIndenticalSpacings
 
-
-def main(argv=None):
-  if argv is None:
-    argv = sys.argv
-  
-  ArgParser = argparse.ArgumentParser(description=' nc_cst_gen.py arguments ( -help ) %s'%InfoString)
-  # Required arguments:
-  ArgParser.add_argument('-pdbs', type=list, help=' input pdbs ', required=True)
-  ArgParser.add_argument('-out', type=str, help=' output directory ', required=True)
-  # Optional arguments:
-  ArgParser.add_argument('-max_dist', type=float, default=3.5, help=' distance between the oxygens and nitrogens ')
-  ArgParser.add_argument('-min_seq_sep', type=int, default=3, help=' minimum seperation in primary sequece ')
-  ArgParser.add_argument('-oxy', type=str, default='O\w?\d?', help=' grep for oxygen atoms ')
-  ArgParser.add_argument('-nit', type=str, default='N\w?\d?', help=' grep for nitrogen atoms ')
-  ArgParser.add_argument('-num_repeats', type=int, default=5, help=' number of repeats to extrapolate contacts for ')
-  ArgParser.add_argument('-min_sasa',  type=float, default=0.0,  help=' floor for weighting nitrogen oxygen contacts ')
-  ArgParser.add_argument('-min_sasa_weight',  type=float, default=1.0,  help=' weight of floor for nitrogen oxygen contacts ')
-  ArgParser.add_argument('-max_sasa',  type=float, default=500.0,  help=' ceiling for cst weighting nitrogen oxygen contacts ')
-  ArgParser.add_argument('-max_sasa_weight',  type=float, default=5.0,  help=' weight of ceiling for nitrogen oxygen contacts ')
-  ArgParser.add_argument('-sasa_probe_radius', type=float, default=2.2,  help=' probe radius for sasa calculations ')
-  Args = ArgParser.parse_args()
-  
-  if len(Args.pdbs[0]) == 1:
-    Args.pdbs = [''.join(Args.pdbs)]
-
-  if Args.out [-1] != '/':
-    Args.out = Args.out + '/'
-
-  OxygenGrep = Args.oxy
-  NitrogenGrep = Args.nit
-
-  ReportedRepeatCount = 0
-  TotalPdbs = len(Args.pdbs)
-
-  # Instace of Alex's sasa calculator
-  SasaCalculator = AtomicSasaCalculator(probe_radius=Args.sasa_probe_radius)
-
-  # Instance of class to convert sasas to cst weight
-  SasaScale = sasa_scale( Args.min_sasa, Args.min_sasa_weight, Args.max_sasa, Args.max_sasa_weight )
-                       #(FloorSasa, FloorWeight, CeilingSasa, CeilingWeight)
-
-  for iPdb, Pdb in enumerate(Args.pdbs):
-    print ' Working with %s; %d of %d total pdbs '%(Pdb, iPdb+1, TotalPdbs)
-
-    # Starting rosetta  
-    Pose = rosetta.pose_from_pdb(Pdb)
-
-    rosetta.dump_pdb(Pose, 'Pose.pdb')
+def get_pose_nc_constraints():
 
     # thanks Alex!!!!
     ResidueAtomSasa = SasaCalculator.calculate_per_atom_sasa(Pose)
+    # print ResidueAtomSasa
 
     # for making full atom kd tree
     ResAtmCoordLists = []
@@ -180,8 +134,6 @@ def main(argv=None):
     ResidueAtomArray = np.array( ResAtmCoordLists )
     ResidueAtomKDTree = spatial.KDTree( ResidueAtomArray )
 
-    # holds constraints before printing
-    Constraints = []
     Oxygens = []
 
     # loop through residues, checks for oxygens in these outer
@@ -201,68 +153,139 @@ def main(argv=None):
     All_Oxygen_Array = np.array([ Oxy[3] for Oxy in Oxygens ])
     # Query KDtree for atoms within -max_dist from oxygens
     Neighbors_of_Oxygens = ResidueAtomKDTree.query_ball_point( All_Oxygen_Array, Args.max_dist )
-    
+
+    # holds constraints before printing
+    AllConstraints = []    
+    # ConstraintsByResidue = []
+
     # Loop through oxygens
     for o, Oxy in enumerate(Oxygens):
       # unpack Oxy tuple
       OxyRes, OxyAtm, OxyName, OxyXyzCoords = Oxy
-      print 'OxyRes, OxyName', OxyRes, OxyName
-      print 'OxyXyzCoords', OxyXyzCoords
 
       Neighbor_Set = Neighbors_of_Oxygens[o]
-      print 'Neighbor number: ', len(Neighbor_Set)
+      # print 'Neighbor number: ', len(Neighbor_Set)
       # prep for loop
       Nitrogens = []
 
       for i in Neighbor_Set:
         NitroRes, NitroAtm = ResAtmRecordLists[i]
         NitroName = Pose.residue(NitroRes).atom_name(NitroAtm).replace(' ', '')
-        print NitroName
+        # print NitroName
         # checks nitrogen name
         if re.match( NitrogenGrep, NitroName ):
           # checks primary sequence spacing
           if np.abs(OxyRes - NitroRes) >= Args.min_seq_sep:
-            print 'found nitrogen neighbor %s'%NitroName
+            # print 'found nitrogen neighbor %s'%NitroName
             NitroXyzCoords = list(Pose.residue(NitroRes).atom(NitroAtm).xyz())
-            print 'NitroRes, NitroName', NitroRes, NitroName
-            print 'NitroXyzCoords', NitroXyzCoords
-            print 'distance: ', tools.vector_magnitude(NitroXyzCoords - OxyXyzCoords)
+            # print 'NitroRes, NitroName', NitroRes, NitroName
+            # print 'NitroXyzCoords', NitroXyzCoords
             Nitrogens.append((NitroRes, NitroAtm, NitroName, NitroXyzCoords))
+        else:
+          
+      Distance = tools.vector_magnitude(NitroXyzCoords - OxyXyzCoords)
 
-      if OxyRes > 50:
-        sys.exit()
-
-      print '\n'*2
-
-    #   Neighbor_Coordinates = [Nitro[3] for Nitro in Nitrogens]
-    #   print 'Neighbor_Coordinates', Neighbor_Coordinates[0:4], Neighbor_Coordinates[-4:]
+      if len(Nitrogens):
+        Neighbor_Coordinates = [Nitro[3] for Nitro in Nitrogens]
+        # print 'Neighbor_Coordinates', Neighbor_Coordinates[0:4], Neighbor_Coordinates[-4:]
+        # Query KDtree for atoms closer than -max_dist from oxygens
+        Neighbors_of_Oxygen_Array = np.array(Neighbor_Coordinates)
+        Nearer_Distance = Distance * 0.9
+        # print 'Neighbors_of_Oxygen_Array', Neighbors_of_Oxygen_Array
+        Neighbors_of_Nitrogens = ResidueAtomKDTree.query_ball_point( Neighbors_of_Oxygen_Array, Nearer_Distance )
       
-    #   # Query KDtree for atoms closer than -max_dist from oxygens
-    #   Neighbors_of_Oxygen_Array = np.array(Neighbor_Coordinates)
-    #   Nearer_Distance = Args.max_dist * 0.9
-    #   print 'Neighbors_of_Oxygen_Array', Neighbors_of_Oxygen_Array
-    #   Neighbors_of_Neighbors = ResidueAtomKDTree.query_ball_point( Neighbors_of_Oxygen_Array, Nearer_Distance )
+      Constraints = []
+      #  Loop through all nitrogen neighbors of oxygen
+      for n, Nitro in enumerate(Nitrogens):
+        # unpack Nitro tuple
+        NitroRes, NitroAtm, NitroName, NitroXyzCoords = Nitro
+
+        # Fudge factor...
+        try:
+          OxygenSasa = ResidueAtomSasa[OxyRes][OxyName]
+          NitrogenSasa = ResidueAtomSasa[NitroRes][NitroName]
+          AverageSasa = np.mean([OxygenSasa, NitrogenSasa])        
+        except KeyError:
+          try:
+            OxygenSasa = ResidueAtomSasa[OxyRes][OxyName]
+            AverageSasa = OxygenSasa
+          except KeyError:
+            try:
+              NitrogenSasa = ResidueAtomSasa[NitroRes][NitroName]
+              AverageSasa = NitrogenSasa
+            except KeyError:
+              AverageSasa = Args.max_sasa
+
+        Neighbors_of_Nitrogens[n]
+
+        # use instance of sasa_scale to calculate weight based on avg sasa of N and C
+        SasaBasedWeight = SasaScale.weigh(AverageSasa)
+        # print 
+        # print 'AverageSasa', AverageSasa
+        # print 'SasaBasedWeight', SasaBasedWeight
+        # adds atom pair constraint to list of constraints
+        Constraints.append('AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f SUMFUNC 2 HARMONIC %.2f 1.0 CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, SasaBasedWeight, Distance ))
+      
+      AllConstraints.extend(Constraints)
+      # ConstraintsByResidue.append(Constraints)
+
+    return AllConstraints
 
 
-    #   #  Loop through all nitrogen neighbors of oxygen
-    #   for n, Nitro in enumerate(Nitrogens):
-    #     # unpack Nitro tuple
-    #     NitroRes, NitroAtm, NitroName, NitroXyzCoords = Nitro
+def main(argv=None):
+  if argv is None:
+    argv = sys.argv
+  
+  ArgParser = argparse.ArgumentParser(description=' nc_cst_gen.py arguments ( -help ) %s'%InfoString)
+  # Required arguments:
+  ArgParser.add_argument('-pdbs', type=list, help=' input pdbs ', required=True)
+  ArgParser.add_argument('-out', type=str, help=' output directory ', required=True)
+  # Optional arguments:
+  ArgParser.add_argument('-max_dist', type=float, default=3.2, help=' distance between the oxygens and nitrogens ')
+  ArgParser.add_argument('-min_seq_sep', type=int, default=3, help=' minimum seperation in primary sequece ')
+  ArgParser.add_argument('-oxy', type=str, default='O\w?\d?', help=' grep for oxygen atoms ')
+  ArgParser.add_argument('-nitro', type=str, default='N\w?\d?', help=' grep for nitrogen atoms ')
+  ArgParser.add_argument('-num_repeats', type=int, default=5, help=' number of repeats to extrapolate contacts for ')
+  ArgParser.add_argument('-min_sasa',  type=float, default=0.0,  help=' floor for weighting nitrogen oxygen contacts ')
+  ArgParser.add_argument('-min_sasa_weight',  type=float, default=1.0,  help=' weight of floor for nitrogen oxygen contacts ')
+  ArgParser.add_argument('-max_sasa',  type=float, default=5.0,  help=' ceiling for cst weighting nitrogen oxygen contacts ')
+  ArgParser.add_argument('-max_sasa_weight',  type=float, default=0.1,  help=' weight of ceiling for nitrogen oxygen contacts ')
+  ArgParser.add_argument('-sasa_probe_radius', type=float, default=0.8,  help=' probe radius for sasa calculations ')
+  Args = ArgParser.parse_args()
+  
+  if len(Args.pdbs[0]) == 1:
+    Args.pdbs = [''.join(Args.pdbs)]
 
-    #     OxygenSasa = ResidueAtomSasa[OxyRes][OxyAtm]
-    #     NitrogenSasa = ResidueAtomSasa[NitroRes][NitroAtm]
-    #     AverageSasa = np.mean([OxygenSasa, NitrogenSasa])
-        
-    #     # use instance of sasa_scale to calculate weight based on avg sasa of N and C
-    #     SasaBasedWeight = SasaScale.weigh(AverageSasa)
+  if Args.out [-1] != '/':
+    Args.out = Args.out + '/'
 
-    #     # adds atom pair constraint to list of constraints
-    #     Constraints.append('AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f SUMFUNC 2 HARMONIC %.2f 1.0 CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, SasaBasedWeight, Distance ))
+  OxygenGrep = Args.oxy
+  NitrogenGrep = Args.nitro
+
+  ReportedRepeatCount = 0
+  TotalPdbs = len(Args.pdbs)
+
+  # Instace of Alex's sasa calculator
+  SasaCalculator = AtomicSasaCalculator(probe_radius=Args.sasa_probe_radius)
+
+  # Instance of class to convert sasas to cst weight
+  SasaScale = sasa_scale( Args.min_sasa, Args.min_sasa_weight, Args.max_sasa, Args.max_sasa_weight )
+                       #(FloorSasa, FloorWeight, CeilingSasa, CeilingWeight)
+
+  for iPdb, Pdb in enumerate(Args.pdbs):
+    print ' Working with %s; %d of %d total pdbs '%(Pdb, iPdb+1, TotalPdbs)
+
+    # Starting rosetta  
+    Pose = rosetta.pose_from_pdb(Pdb)
+    # Sets pdb info so residues in dumped pdbs are same as index 
+    Pose.pdb_info(rosetta.core.pose.PDBInfo( Pose ))
+    rosetta.dump_pdb(Pose, 'PoseNumbered.pdb')
+
 
     # CstName = Pdb.replace('.pdb', '_nc.cst')
     
     # with open(CstName, 'w') as CstFile:
-    #   print>>CstFile, '\n'.join(Constraints) 
+    #   print>>CstFile, '\n'.join(AllConstraints) 
 
     # # Non-rosetta part, this finds primary sequence repeats to duplicate 
     # PdbWDAG = pdb_wdag(Pdb, 3, 4.7, 0.25, 15 )
