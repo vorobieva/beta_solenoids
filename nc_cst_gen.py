@@ -23,9 +23,12 @@ import subprocess
 import argparse
 import sys
 import os
+import re
 
 import rosetta
 rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
+
+sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 '''
 
 ThreeToOne = {'GLY':'G','ALA':'A','VAL':'V','LEU':'L','ILE':'I','MET':'M','PRO':'P','PHE':'F','TRP':'W','SER':'S','THR':'T','ASN':'N','GLN':'Q','TYR':'Y','CYS':'C','CYD':'C','LYS':'K','ARG':'R','HIS':'H','ASP':'D','GLU':'E','STO':'*','UNK':'U'}
@@ -34,9 +37,30 @@ ChainAlphabetIndices = {'A':1, 'B':2, 'C':3, 'D':4, 'E':5, 'F':6, 'G':7, 'H':8, 
 def pymol_commands(Pdb, Repeat, ReportedRepeatCount):
   return 'fetch %s\tselect rep%d, resi %s'%( Pdb, ReportedRepeatCount, '+'.join([str(Res) for Res in Repeat]) )
 
+class sasa_scale:
+  ''' gives weight in arbitray range based on sasa score '''
+  def __init__(self, FloorSasa, FloorWeight, CeilingSasa, CeilingWeight):
+      self.FloorSasa = FloorSasa
+      self.FloorWeight = FloorWeight
+      self.CeilingSasa = CeilingSasa
+      self.CeilingWeight = CeilingWeight
+      
+      self.SasaRangeMag = CeilingSasa - FloorSasa
+      self.WeightRangeMag = CeilingWeight - FloorWeight
+
+  def weigh(self, SasaToWeigh):
+    if SasaToWeigh <= FloorSasa:
+      return self.FloorWeight
+    elif SasaToWeigh >= Ceiling:
+      return self.CeilingWeight
+    else:
+      Proportion =  (SasaToWeigh - self.FloorSasa) / self.SasaRangeMag
+      return (self.WeightRangeMag * Proportion) + FloorWeight
+
+
 def consolidate_repeats(ListOfRepeatPositions):
-  
-  TandemIndenticalSpacings = {0:[]}
+  ''' takes lists of repeat positions (based on xyz coords) and returns subsets that split the pose longest equal residue number repeat chains '''  
+  TandemIndenticalSpacings = {} #{0:[]}
   
   for RepeatPositions in ListOfRepeatPositions:
     RepeatPositions = RepeatPositions[:]
@@ -88,140 +112,202 @@ def main(argv=None):
   ArgParser = argparse.ArgumentParser(description=' nc_cst_gen.py arguments ( -help ) %s'%InfoString)
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=list, help=' input pdbs ', required=True)
-  ArgParser.add_argument('-output', type=str, help=' output directory ', required=True)
+  ArgParser.add_argument('-out', type=str, help=' output directory ', required=True)
   # Optional arguments:
+  ArgParser.add_argument('-max_dist', type=float, default=3.5, help=' distance between the oxygens and nitrogens ')
+  ArgParser.add_argument('-min_seq_sep', type=int, default=3, help=' minimum seperation in primary sequece ')
   ArgParser.add_argument('-oxy', type=str, default='O\w?\d?', help=' grep for oxygen atoms ')
   ArgParser.add_argument('-nit', type=str, default='N\w?\d?', help=' grep for nitrogen atoms ')
-  ArgParser.add_argument('-max_dist', type=float, default=3.0, help=' distance between the oxygens and nitrogens ')
-  ArgParser.add_argument('-min_seq_sep', type=int, default=3, help=' minimum seperation in primary sequece ')
   ArgParser.add_argument('-num_repeats', type=int, default=5, help=' number of repeats to extrapolate contacts for ')
-
   ArgParser.add_argument('-min_sasa',  type=float, default=0.0,  help=' floor for weighting nitrogen oxygen contacts ')
+  ArgParser.add_argument('-min_sasa_weight',  type=float, default=1.0,  help=' weight of floor for nitrogen oxygen contacts ')
   ArgParser.add_argument('-max_sasa',  type=float, default=500.0,  help=' ceiling for cst weighting nitrogen oxygen contacts ')
+  ArgParser.add_argument('-max_sasa_weight',  type=float, default=5.0,  help=' weight of ceiling for nitrogen oxygen contacts ')
   ArgParser.add_argument('-sasa_probe_radius', type=float, default=2.2,  help=' probe radius for sasa calculations ')
-  args = ArgParser.parse_args()
+  Args = ArgParser.parse_args()
   
+  if len(Args.pdbs[0]) == 1:
+    Args.pdbs = [''.join(Args.pdbs)]
+
+  if Args.out [-1] != '/':
+    Args.out = Args.out + '/'
+
   OxygenGrep = Args.oxy
   NitrogenGrep = Args.nit
-
-  # for making full atom kd tree
-  ResAtmCoordLists = []
-  # for translating from kd tree index to ( residue, atom ) coord
-  ResAtmRecordLists = []
-
-  # loop through all residue numbers
-  for Res in range(1, Pose.n_residue() + 1):
-    # remade for each residue
-    AtmRecordList = []
-    AtmCoordList = []
-    # loop through residue's atom numbers
-    for Atm in range(1, Pose.residue(Res).natoms() + 1):
-      # add (residue, atom) coord to residue's list
-      AtmRecordList.append((Res, Atm))
-      # add atom xyz coord to residue's list
-      AtmCoordList.append(Pose.residue(Res).atom(Atm).xyz())
-    # add residue's lists to respective global lists
-    ResAtmRecordLists.append(AtmRecordList)
-    ResAtmCoordLists.append(AtmCoordList)
-
-  ResidueAtomArray = np.array( ResAtmCoordLists )
-  ResidueAtomKDTree = spatial.KDTree( ResidueAtomArray )
 
   ReportedRepeatCount = 0
   TotalPdbs = len(Args.pdbs)
 
+  # Instace of Alex's sasa calculator
+  SasaCalculator = AtomicSasaCalculator(probe_radius=Args.sasa_probe_radius)
+
+  # Instance of class to convert sasas to cst weight
+  SasaScale = sasa_scale( Args.min_sasa, Args.min_sasa_weight, Args.max_sasa, Args.max_sasa_weight )
+                       #(FloorSasa, FloorWeight, CeilingSasa, CeilingWeight)
+
   for iPdb, Pdb in enumerate(Args.pdbs):
     print ' Working with %s; %d of %d total pdbs '%(Pdb, iPdb+1, TotalPdbs)
-
-    PdbWDAG = pdb_wdag(Pdb, 3, 4.7, 0.25, 15 )
-    PdbWDAG.find_downstream_neighbors()
-    RepeatChains = PdbWDAG.find_repeat_chains()
-    
-    ConsolidatedRepeatStarts, TandemRepeats = consolidate_repeats(RepeatChains)
 
     # Starting rosetta  
     Pose = rosetta.pose_from_pdb(Pdb)
 
+    rosetta.dump_pdb(Pose, 'Pose.pdb')
+
     # thanks Alex!!!!
     ResidueAtomSasa = SasaCalculator.calculate_per_atom_sasa(Pose)
-    
+
+    # for making full atom kd tree
+    ResAtmCoordLists = []
+    # for translating from kd tree index to ( residue, atom ) coord
+    ResAtmRecordLists = []
+
+    # loop through all residue numbers
+    for Res in range(1, Pose.n_residue() + 1):
+      # remade for each residue
+      AtmRecordList = []
+      AtmCoordList = []
+      # loop through residue's atom numbers
+      for Atm in range(1, Pose.residue(Res).natoms() + 1):
+        # add (residue, atom) coord to residue's list
+        AtmRecordList.append((Res, Atm))
+        # add atom xyz coord to residue's list
+        AtmCoordList.append( list(Pose.residue(Res).atom(Atm).xyz()) )
+      
+      # add residue's lists to respective global lists
+      ResAtmRecordLists.extend(AtmRecordList)
+      ResAtmCoordLists.extend(AtmCoordList)
+
+    ResidueAtomArray = np.array( ResAtmCoordLists )
+    ResidueAtomKDTree = spatial.KDTree( ResidueAtomArray )
+
     # holds constraints before printing
     Constraints = []
     Oxygens = []
-    # Nitrogens = {}
-    # Other = {}
 
     # loop through residues, checks for oxygens in these outer
     # this is not 'import this' like :(
     for OxyRes in range( 1, Pose.n_residue() + 1 ):
       # loop through atoms
       for OxyAtm in range( 1, Pose.residue(OxyRes).natoms() + 1 ):
-
-        print Pose.residue(OxyRes).atom_names(OxyAtm)
-        
-        OxyName = Pose.residue(OxyRes).atom_names(OxyAtm)
+        OxyName = Pose.residue(OxyRes).atom_name(OxyAtm).replace(' ', '')
         # checks oxygen name
         if re.match(OxygenGrep, OxyName ): # <- this guy 
+          print 'found oxygen %s'%OxyName
           # gets the coordinates from 
-          oxygen_xyz_coords = tools.derosettafy( Pose.residue(OxyRes).atom(OxyAtm).xyz() )
-          Oxygens.append((OxyRes, OxyAtm, OxyName, oxygen_xyz_coords))
+          OxyXyzCoords = tools.derosettafy( Pose.residue(OxyRes).atom(OxyAtm).xyz() )
+          Oxygens.append((OxyRes, OxyAtm, OxyName, OxyXyzCoords))
 
     # assembles array with coordinates of all oxygens
     All_Oxygen_Array = np.array([ Oxy[3] for Oxy in Oxygens ])
     # Query KDtree for atoms within -max_dist from oxygens
     Neighbors_of_Oxygens = ResidueAtomKDTree.query_ball_point( All_Oxygen_Array, Args.max_dist )
     
-    # sort out results
+    # Loop through oxygens
     for o, Oxy in enumerate(Oxygens):
       # unpack Oxy tuple
-      OxyRes, OxyAtm, OxyName, oxygen_xyz_coords = Oxy
+      OxyRes, OxyAtm, OxyName, OxyXyzCoords = Oxy
+      print 'OxyRes, OxyName', OxyRes, OxyName
+      print 'OxyXyzCoords', OxyXyzCoords
+
       Neighbor_Set = Neighbors_of_Oxygens[o]
+      print 'Neighbor number: ', len(Neighbor_Set)
       # prep for loop
-      Neighbor_Coordinates = []     
-      Neighbor_Names = []
+      Nitrogens = []
+
       for i in Neighbor_Set:
-        Res, Atm = ResAtmRecordLists[i]
-        Neighbor_Coordinates.append( tools.derosettafy( Pose.residue(Res).atom(Atm).xyz() ) )
-        Neighbor_Names.append( Pose.residue(Res).atom_name(Atm) )
+        NitroRes, NitroAtm = ResAtmRecordLists[i]
+        NitroName = Pose.residue(NitroRes).atom_name(NitroAtm).replace(' ', '')
+        print NitroName
+        # checks nitrogen name
+        if re.match( NitrogenGrep, NitroName ):
+          # checks primary sequence spacing
+          if np.abs(OxyRes - NitroRes) >= Args.min_seq_sep:
+            print 'found nitrogen neighbor %s'%NitroName
+            NitroXyzCoords = list(Pose.residue(NitroRes).atom(NitroAtm).xyz())
+            print 'NitroRes, NitroName', NitroRes, NitroName
+            print 'NitroXyzCoords', NitroXyzCoords
+            print 'distance: ', tools.vector_magnitude(NitroXyzCoords - OxyXyzCoords)
+            Nitrogens.append((NitroRes, NitroAtm, NitroName, NitroXyzCoords))
 
-      # Query KDtree for atoms closer than -max_dist from oxygens
-      Neighbors_of_Oxygen_Array = np.array(Neighbor_Coordinates)
-      Nearer_Distance = Args.max_dist * 0.9
-      Neighbors_of_Neighbors = ResidueAtomKDTree.query_ball_point( Neighbors_of_Oxygen_Array, Nearer_Distance )
+      if OxyRes > 50:
+        sys.exit()
 
-      for o, Oxy in enumerate(Oxygens):
-        Neighbors Neighbors_of_Neighbors[o]
+      print '\n'*2
+
+    #   Neighbor_Coordinates = [Nitro[3] for Nitro in Nitrogens]
+    #   print 'Neighbor_Coordinates', Neighbor_Coordinates[0:4], Neighbor_Coordinates[-4:]
       
-      Constraints.append('AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f SUMFUNC 2 HARMONIC %.2f 1.0 CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, Weight, Distance ))
-
-    # Nitrogen
-    #   # Make new array from KDtree hits
-    #   near_xyz_coords = np.array([ ResidueAtomArray[hit] for hit in oxygen_neighbors ])
-    #   # this is to capture covalent and/or ionic bond lengths
-    #   # Neighbors of neighbors, for angle constraints 
-    #   secondary_hits = ResidueAtomKDTree.query_ball_point( near_xyz_coords, Nearer_Distance )
-
-    #   # Loops through neighbors to look for nitrogens
-    #   for i, hit in enumerate(oxygen_neighbors):
-    #     NitroRes, NitroAtm = AtmRecordList[hit]
-    #     NitroName = Pose.residue(NitroRes).atom_names(NitroAtm)
-
-    #     if re.match(NitrogenGrep, NitroName ): 
-    #       NitroCoords = Pose.residue(NitroRes).xyz(NitroAtm)
-
-    #       # gets the coordinates from 
-    #       NitrogenArray = tools.derosettafy( Pose.residue(NitroRes).atom(NitroAtm).xyz() )
-          
-    #       # almost certainly some rosetta way of doing this
-    #       Displacement = OxygenArray - NitrogenArray
-    #       Distance = tools.vector_magnitude(Displacement)
-
-    #       # 'AtomPair %s %d %s %d SCALARWEIGHTEDFUNC 2.0 SUMFUNC 2 SIGMOID %.2f %.2f CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, Distance, Slope )
-
-    #       # Loop through atoms that are closer to the nitrogen than the oxygen is
-    #       for i, hit in enumerate(secondary_hits):
-    #         print hit
+    #   # Query KDtree for atoms closer than -max_dist from oxygens
+    #   Neighbors_of_Oxygen_Array = np.array(Neighbor_Coordinates)
+    #   Nearer_Distance = Args.max_dist * 0.9
+    #   print 'Neighbors_of_Oxygen_Array', Neighbors_of_Oxygen_Array
+    #   Neighbors_of_Neighbors = ResidueAtomKDTree.query_ball_point( Neighbors_of_Oxygen_Array, Nearer_Distance )
 
 
-if __name__ == "__main__":
-  sys.exit(main())
+    #   #  Loop through all nitrogen neighbors of oxygen
+    #   for n, Nitro in enumerate(Nitrogens):
+    #     # unpack Nitro tuple
+    #     NitroRes, NitroAtm, NitroName, NitroXyzCoords = Nitro
+
+    #     OxygenSasa = ResidueAtomSasa[OxyRes][OxyAtm]
+    #     NitrogenSasa = ResidueAtomSasa[NitroRes][NitroAtm]
+    #     AverageSasa = np.mean([OxygenSasa, NitrogenSasa])
+        
+    #     # use instance of sasa_scale to calculate weight based on avg sasa of N and C
+    #     SasaBasedWeight = SasaScale.weigh(AverageSasa)
+
+    #     # adds atom pair constraint to list of constraints
+    #     Constraints.append('AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f SUMFUNC 2 HARMONIC %.2f 1.0 CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, SasaBasedWeight, Distance ))
+
+    # CstName = Pdb.replace('.pdb', '_nc.cst')
+    
+    # with open(CstName, 'w') as CstFile:
+    #   print>>CstFile, '\n'.join(Constraints) 
+
+    # # Non-rosetta part, this finds primary sequence repeats to duplicate 
+    # PdbWDAG = pdb_wdag(Pdb, 3, 4.7, 0.25, 15 )
+    # PdbWDAG.find_downstream_neighbors()
+    # RepeatChains = PdbWDAG.find_repeat_chains()
+    
+    # ConsolidatedRepeatStarts, TandemRepeats = consolidate_repeats(RepeatChains)
+
+    # rosetta.dump_pose(Pose, '.base.pdb')
+    # FirstResidue = 1
+    # LastResidue = Pose.n_residue()
+    # time.sleep(0.5)
+
+    # # loops through all repeats in start 
+    # for RepeatStart in ConsolidatedRepeatStarts:
+    #   print
+    #   print RepeatStart
+    #   print ConsolidatedRepeatStarts[RepeatStart]
+
+    #   RepeatSpacings = TandemRepeats[RepeatStart]
+    #   Length = RepeatSpacings[0]
+
+    #   for FirstShiftMultipler in range(len(RepeatSpacings[:-1])):
+    #     SecondShiftMultipler = i+1
+    #     StartFirst = RepeatStart + (Length * FirstShiftMultipler ) 
+    #     EndFirst = StartFirst + Length - 1 
+    #     StartSecond = Repeat + (Length * FirstShiftMultipler )
+    #     EndSecond = StartSecond + Length - 1
+    #     print StartFirst, EndFirst
+    #     print StartSecond, EndSecond
+
+    # dump_pdb( (Pose)arg1, (OStream)out, (vector1_Size)residue_indices [, (str)tag='1']) -> None :
+    #     for writing a specified subset of residues in pdb format
+        
+      # ExtendPdbOutput = subprocess.check_output([extend_pdb.py,
+      #                                           '-pdb_file', '.base.pdb',
+      #                                           '-start_N_cap', FirstResidue,
+      #                                           '-end_N_cap', RepeatStart-1,
+      #                                           '-start_repeat_1' START_REPEAT_1,
+      #                                           '-end_repeat_1', END_REPEAT_1,
+      #                                           '-start_repeat_2' START_REPEAT_2,
+      #                                           '-end_repeat_2', END_REPEAT_2,
+      #                                           '-start_C_cap' START_C_CAP,
+      #                                           '-end_C_cap', LastResidue,
+      #                                           '-repeat_number', REPEAT_NUMBER])
+
+# if __name__ == "__main__":
+#   sys.exit(main())
