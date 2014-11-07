@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-# all hail Alex Ford
+# Thanks Alex Ford!
 from interface_fragment_matching.utility.analysis import AtomicSasaCalculator
 
 from multiprocessing import Process
@@ -25,7 +25,7 @@ class alpha_carbon:
 		self.Number = int(Number)
 		self.DownstreamNeighbors = {} # keyed with residue number, value is displacement vector to that residue's own CA
 
-
+# start of objects:
 
 class pdb_wdag:
 	""" Init method takes protein and spawns Calpha instances to populate """
@@ -89,7 +89,6 @@ class pdb_wdag:
 
 				if len(RepeatChain) >= self.MinRepeats:
 					Repeats.append(RepeatChain)
-					# print 'select repeat%d, resi %s'%(Count,'+'.join([str(Number).split('.')[0] for Number in RepeatChain]))
 
 		return Repeats
 
@@ -128,7 +127,9 @@ class pdb_wdag:
 		self.ResidueIndentityDict = { int(Line[22:26]) : ThreeToOne[Line[17:20]] for Line in CalphaLines}
 		return np.array( CalphaValues )
 
+# end of objects:
 
+# start of functions:
 
 def score_repeat_composition(RepeatChains, AminoAcidIdentityDict, AminoAcidScoreMatrix):
 	RepeatCompositions = []
@@ -142,11 +143,9 @@ def score_repeat_composition(RepeatChains, AminoAcidIdentityDict, AminoAcidScore
 	return (RepeatCompositions, RepeatScores)
 
 
-
 def check_sasa(Pdb, ResidueSubsets, StartingResidue, LastResidue, SasaProbeRadius):
 	''' Uses Alex's AtomicSasaCalculator to calculate average SASA (surface area solvent accessibility) for residue sets input '''
 	PdbfullPath = ''.join( ['/lab/databases/pdb_clean/', Pdb[1:3].lower(), '/', Pdb[0:4], '.pdb'] )
-	
 	# Load pdb into a rosetta pose object 
 	PdbPose = rosetta.pose_from_pdb(PdbfullPath)
 
@@ -194,6 +193,7 @@ def check_sasa(Pdb, ResidueSubsets, StartingResidue, LastResidue, SasaProbeRadiu
 def pymol_commands(Pdb, Repeat, ReportedRepeatCount):
 	return 'fetch %s\tselect rep%d, resi %s'%( Pdb, ReportedRepeatCount, '+'.join([str(Res) for Res in Repeat]) )
 
+# end of functions:
 
 def main(argv=None):
 	if argv is None:

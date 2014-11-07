@@ -3,11 +3,62 @@
 from scipy import spatial
 import numpy as np
 
+
+def consolidate_repeats(ListOfRepeatPositions):
+  
+  TandemIndenticalSpacings = {0:[]}
+  
+  for RepeatPositions in ListOfRepeatPositions:
+    RepeatPositions = RepeatPositions[:]
+    RepeatSpacings = [ RepeatPositions[i+1] - RepeatPositions[i] for i in range(len(RepeatPositions)-1) ]
+
+    # appending buffer value for added last repeat chain to TandemIndenticalSpacings
+    RepeatSpacings.append(0)
+    RepeatPositions.append(0)
+
+    LastSpacing = 0
+    RepeatChain = [RepeatSpacings[0]]
+    Start = RepeatPositions[0]
+    
+    for i, Spacing in enumerate(RepeatSpacings):
+      if Spacing == LastSpacing:
+        RepeatChain.append(Spacing)
+      else:
+        TandemIndenticalSpacings[Start] = RepeatChain
+        Start = RepeatPositions[i]
+        RepeatChain = [RepeatSpacings[i]]
+
+      LastSpacing = Spacing
+  
+  MaxNumberStart = 0
+  EqualLengthStarts = []
+
+  for Start in TandemIndenticalSpacings:
+    if len(TandemIndenticalSpacings[Start]) > len(TandemIndenticalSpacings[MaxNumberStart]):
+      MaxNumberStart = Start
+      EqualLengthStarts = []
+    elif len(TandemIndenticalSpacings[Start]) == len(TandemIndenticalSpacings[MaxNumberStart]):
+      EqualLengthStarts.append(Start)
+
+  for RepeatStart in EqualLengthStarts:
+    try:
+      assert TandemIndenticalSpacings[MaxNumberStart][0] == TandemIndenticalSpacings[RepeatStart][0], ' different repeat spacings have same max copy number ' 
+    # This is explicted (semi) silenced to prevent a large job from stopping at some later date
+    except AssertionError:
+      print '\n\n\n LOOKOUT ERROR: multiple different repeat spacings have max copy number. \n\n\n'
+
+  MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
+
+  return MaxNumberRepeatStarts, TandemIndenticalSpacings
+
+
 def vector_magnitude(Vector):
    ''' ND pythagorean theorem '''
    return ( np.sum( [ Component**2 for Component in Vector ] ) )**0.5
 
 def derosettafy(RosettaVector):
+  print ''' STOP USING derosettafy USE LIST '''
+  assert 0 ,''' STOP USING derosettafy USE LIST '''
   List = [float(Value) for Value in RosettaVector]
   return np.array(List)
 
@@ -17,9 +68,6 @@ def angle(Vector1, Vector2):
 def rmsd_2_np_arrays(crds1, crds2):
   """Returns RMSD between 2 sets of [nx3] numpy array
   Thanks Daniel! """
-  #D assert(crds1.shape[1] == 3)
-  #D assert(crds1.shape == crds2.shape)
-
   ##Corrected to account for removal of the COM
   COM1 = np.sum(crds1,axis=0) / crds1.shape[0]
   COM2 = np.sum(crds2,axis=0) / crds2.shape[0]
@@ -83,3 +131,114 @@ def match_hotspots_and_motifs_to_dock(DockedPose, MotifPose):
    # print MotifsByPosition
 
    return MotifsByPosition
+
+class alpha_carbon:
+  """ Calpha node for wDAG searches of proteins for repeats """
+  def __init__(self, Number, CoordinateArray):
+    if type(CoordinateArray) == list:
+      CoordinateArray = np.array(CoordinateArray)
+    self.CoordinateArray = CoordinateArray
+    self.Number = int(Number)
+    self.DownstreamNeighbors = {} # keyed with residue number, value is displacement vector to that residue's own CA
+
+class pose_wdag:
+  """ 'wDag' is a little generous. Init method takes protein and spawns Calpha instances to populate """
+  def __init__( self, Pose, MinRepeats=2, DistanceTarget=4.7, DistanceFlex=0.5, AngleFlex=15.0 ):
+    self.Pose = Pose
+    self.MinRepeats = MinRepeats
+    self.DistanceTarget = DistanceTarget
+    self.DistanceFlex = DistanceFlex
+    self.AngleFlex = np.radians(AngleFlex) # converts to radians
+
+    # make instance of alpha_carbon for each row
+    self.CalphaInstances = []
+    CalphaCoords = []
+    for P in range(Pose.n_residue()):
+      CoordList = list( self.Pose.residue(P).xyz('CA') )
+      self.CalphaInstances.append( alpha_carbon(P, CoordList) )
+      CalphaCoords.append( CoordList )
+
+    self.CalphaArray = np.array(CalphaCoords)
+
+
+  def find_repeat_chains(self):
+    CheckRedundancyChecker = {}
+    Repeats = []
+    Count = 0
+    for Calpha in self.CalphaInstances:
+      for NeighborNumber in Calpha.DownstreamNeighbors:
+        '''
+        Repeat chains start with each of Calphas downstream neighbors 
+        and are recursively extended so long as VecA ~= VecB
+        
+           VecA      VecB
+        CA- - - > CA- - - > CA
+        '''
+        Count += 1
+        RepeatChain = [ Calpha.Number ]
+        RecursiveCalpha = Calpha
+        DownstreamNumber = NeighborNumber
+        
+        try:
+          CheckRedundancyChecker['%d_%d'%(Calpha.Number, DownstreamNumber)]
+
+        except KeyError:
+          ChainExtended = 1
+
+        while ChainExtended:
+          RepeatChain.append(DownstreamNumber)
+          DownstreamCalpha = self.CalphaDict[DownstreamNumber]          
+          VectorA = RecursiveCalpha.DownstreamNeighbors[DownstreamNumber]
+          
+          ChainExtended = 0 # not extended unless valid extension found
+          for NextDownstreamNumber in DownstreamCalpha.DownstreamNeighbors:
+            
+            # To prevent redundant calculations, upstream downstream pairs already investigated aren't considered         
+            try:
+              CheckRedundancyChecker['%d_%d'%(DownstreamNumber, NextDownstreamNumber)]
+            # only residue pairs not in redundancy checking dictionary are considering
+            except KeyError:
+              VectorB = DownstreamCalpha.DownstreamNeighbors[NextDownstreamNumber]
+            
+              if spatial.distance.cosine(VectorA, VectorB) < self.AngleFlex:
+                CheckRedundancyChecker['%d_%d'%(DownstreamNumber, NextDownstreamNumber)] = True
+                DownstreamNumber = NextDownstreamNumber
+                RecursiveCalpha = DownstreamCalpha
+                ChainExtended = 1
+                break
+
+        if len(RepeatChain) >= self.MinRepeats:
+          Repeats.append(RepeatChain)
+          # print 'select repeat%d, resi %s'%(Count,'+'.join([str(Number).split('.')[0] for Number in RepeatChain]))
+
+    return Repeats
+
+  def find_downstream_neighbors(self):
+    ''' To set up DAG Calphas become nodes'''
+    self.CalphaDict = {}
+    for i, Instance in enumerate(self.CalphaInstances):
+      # To make the graph directed, repeat chains will always be arranged from 
+      for Subsequent in self.CalphaInstances[i:]:
+        # Displacement from lower numbered residue to higher number
+        Displacement = Subsequent.CoordinateArray - Instance.CoordinateArray
+        # Magnitute of displacement vector
+        Distance = (np.sum([Component**2 for Component in Displacement]))**0.5
+        # check if displacement of given Instance (upstream) and Subsequent (downstream) has magnitute within target range
+        if np.abs(Distance - self.DistanceTarget) <= self.DistanceFlex:
+          # if in range record Subsequent as downstream neighbor 
+          Instance.DownstreamNeighbors[Subsequent.Number] = Displacement
+      # add residue alpha carbon instance to dictionary
+      self.CalphaDict[Instance.Number] = Instance
+
+
+  def pdb_coord_array(self, Pdb):
+
+    # gets full path to pdb in lab database
+    PdbfullPath = ''.join( ['/lab/databases/pdb_clean/', Pdb[1:3].lower(), '/', Pdb, '.pdb'] )
+
+    CalphaLines = subprocess.check_output(['grep', 'ATOM.........CA......%s'%Chain, PdbfullPath]).strip('\n').split('\n')
+    CalphaValues = [ [ int(Line[22:26]), float(Line[30:38]), float(Line[38:46]), float(Line[46:54]) ] for Line in CalphaLines]
+
+    self.ResidueIndentityDict = { int(Line[22:26]) : ThreeToOne[Line[17:20]] for Line in CalphaLines}
+    return np.array( CalphaValues )
+
