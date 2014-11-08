@@ -182,7 +182,7 @@ def get_pose_nc_constraints():
             # print 'NitroXyzCoords', NitroXyzCoords
             Nitrogens.append((NitroRes, NitroAtm, NitroName, NitroXyzCoords))
         else:
-          
+
       Distance = tools.vector_magnitude(NitroXyzCoords - OxyXyzCoords)
 
       if len(Nitrogens):
@@ -280,7 +280,6 @@ def main(argv=None):
     # Sets pdb info so residues in dumped pdbs are same as index 
     Pose.pdb_info(rosetta.core.pose.PDBInfo( Pose ))
     rosetta.dump_pdb(Pose, 'PoseNumbered.pdb')
-
 
     # CstName = Pdb.replace('.pdb', '_nc.cst')
     
