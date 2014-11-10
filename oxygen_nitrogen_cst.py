@@ -9,15 +9,20 @@ This script is to generate ATOMPAIR constraints for Rosetta,
 
 '''
 
-'''
-# This is used to give buried N - C contacts more weight. Thanks Alex Ford!
-from interface_fragment_matching.utility.analysis import AtomicSasaCalculator
+# comment just next line and copy block in 
+# multiline string for ipython mode
+
+# '''
+# This is used to give buried N - O contacts more weight. Thanks Alex Ford!
+try:
+  from interface_fragment_matching.utility.analysis import AtomicSasaCalculator
+except ImportError:
+  ' Error: SASA weighting of contacts requires interface_fragment_matching from Alex Ford '
 
 import tools
 
 from multiprocessing import Process
 from scipy import spatial
-
 import numpy as np
 import subprocess
 import argparse
@@ -28,8 +33,7 @@ import re
 import rosetta
 rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
 
-sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
-'''
+# ''', sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 
 ThreeToOne = {'GLY':'G','ALA':'A','VAL':'V','LEU':'L','ILE':'I','MET':'M','PRO':'P','PHE':'F','TRP':'W','SER':'S','THR':'T','ASN':'N','GLN':'Q','TYR':'Y','CYS':'C','CYD':'C','LYS':'K','ARG':'R','HIS':'H','ASP':'D','GLU':'E','STO':'*','UNK':'U'}
 ChainAlphabetIndices = {'A':1, 'B':2, 'C':3, 'D':4, 'E':5, 'F':6, 'G':7, 'H':8, 'I':9, 'J':10, 'K':11, 'L':12, 'M':13, 'N':14, 'O':15, 'P':16, 'Q':17, 'R':18, 'S':19, 'T':20, 'U':21, 'V':22, 'W':23, 'X':24, 'Y':25, 'Z':26 }
@@ -40,13 +44,13 @@ def pymol_commands(Pdb, Repeat, ReportedRepeatCount):
 class sasa_scale:
   ''' gives weight in arbitray range based on sasa score '''
   def __init__(self, FloorSasa, FloorWeight, CeilingSasa, CeilingWeight):
-      self.FloorSasa = FloorSasa
-      self.FloorWeight = FloorWeight
-      self.CeilingSasa = CeilingSasa
-      self.CeilingWeight = CeilingWeight
-      
-      self.SasaRangeMag = CeilingSasa - FloorSasa
-      self.WeightRangeMag = CeilingWeight - FloorWeight
+    self.FloorSasa = FloorSasa
+    self.FloorWeight = FloorWeight
+    self.CeilingSasa = CeilingSasa
+    self.CeilingWeight = CeilingWeight
+    
+    self.SasaRangeMag = CeilingSasa - FloorSasa
+    self.WeightRangeMag = CeilingWeight - FloorWeight
 
   def weigh(self, SasaToWeigh):
     if SasaToWeigh <= self.FloorSasa:
@@ -104,11 +108,15 @@ def consolidate_repeats(ListOfRepeatPositions):
   MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
   return MaxNumberRepeatStarts, TandemIndenticalSpacings
 
-def get_pose_nc_constraints():
-
-    # thanks Alex!!!!
-    ResidueAtomSasa = SasaCalculator.calculate_per_atom_sasa(Pose)
-    # print ResidueAtomSasa
+def get_pose_nc_constraints(Pose, SasaScale):
+    '''  '''
+    # SasaCalculator is from Alex's interface_fragment_matching 
+    # thanks Alex!
+    #
+    try:
+      ResidueAtomSasa = SasaCalculator.calculate_per_atom_sasa(Pose)
+    except:
+      ResidueAtomSasa = SasaCalculator.calculate_per_atom_sasa(Pose)
 
     # for making full atom kd tree
     ResAtmCoordLists = []
@@ -136,18 +144,20 @@ def get_pose_nc_constraints():
 
     Oxygens = []
 
-    # loop through residues, checks for oxygens in these outer
-    # this is not 'import this' like :(
+    # loop through residues storing info on oxygens
     for OxyRes in range( 1, Pose.n_residue() + 1 ):
       # loop through atoms
       for OxyAtm in range( 1, Pose.residue(OxyRes).natoms() + 1 ):
         OxyName = Pose.residue(OxyRes).atom_name(OxyAtm).replace(' ', '')
-        # checks oxygen name
-        if re.match(OxygenGrep, OxyName ): # <- this guy 
-          print 'found oxygen %s'%OxyName
+
+        #                   this code makes me feel like this guy 
+        #                               | 
+        # checks oxygen name            v
+        if re.match(OxygenGrep, OxyName ):
+          # print 'found oxygen %s'%OxyName
           # gets the coordinates from 
-          OxyXyzCoords = tools.derosettafy( Pose.residue(OxyRes).atom(OxyAtm).xyz() )
-          Oxygens.append((OxyRes, OxyAtm, OxyName, OxyXyzCoords))
+          OxyXyzCoords = np.array( list( Pose.residue(OxyRes).atom(OxyAtm).xyz ) )
+          Oxygens.append( (OxyRes, OxyAtm, OxyName, OxyXyzCoords) )
 
     # assembles array with coordinates of all oxygens
     All_Oxygen_Array = np.array([ Oxy[3] for Oxy in Oxygens ])
@@ -175,13 +185,15 @@ def get_pose_nc_constraints():
         # checks nitrogen name
         if re.match( NitrogenGrep, NitroName ):
           # checks primary sequence spacing
+          # to remove set:  -min_seq_sep 0
           if np.abs(OxyRes - NitroRes) >= Args.min_seq_sep:
             # print 'found nitrogen neighbor %s'%NitroName
             NitroXyzCoords = list(Pose.residue(NitroRes).atom(NitroAtm).xyz())
             # print 'NitroRes, NitroName', NitroRes, NitroName
             # print 'NitroXyzCoords', NitroXyzCoords
             Nitrogens.append((NitroRes, NitroAtm, NitroName, NitroXyzCoords))
-        else:
+        elif 'N' in NitroName:
+          print 'skipping atom named: %s , make sure it is not a nitrogen'%NitroName
 
       Distance = tools.vector_magnitude(NitroXyzCoords - OxyXyzCoords)
 
@@ -200,25 +212,34 @@ def get_pose_nc_constraints():
         # unpack Nitro tuple
         NitroRes, NitroAtm, NitroName, NitroXyzCoords = Nitro
 
-        # Fudge factor...
+        # these trys / excepts seperate 
+        # backbone-backbone from 
+        # backbone-sidechain from
+        # sidechain-sidechain interactions
+        # 
+        # in future maybe sort into seperate lists
         try:
           OxygenSasa = ResidueAtomSasa[OxyRes][OxyName]
           NitrogenSasa = ResidueAtomSasa[NitroRes][NitroName]
           AverageSasa = np.mean([OxygenSasa, NitrogenSasa])        
         except KeyError:
+          # These lines handle backbone to sidechain interactions
+          # set weight equal to the most buried 
           try:
             OxygenSasa = ResidueAtomSasa[OxyRes][OxyName]
-            AverageSasa = OxygenSasa
+            AverageSasa = SasaScale.FloorSasa
           except KeyError:
             try:
               NitrogenSasa = ResidueAtomSasa[NitroRes][NitroName]
-              AverageSasa = NitrogenSasa
+              AverageSasa = SasaScale.FloorSasa 
+            
+            # set weight of side chain side chain equal to the most buried             
             except KeyError:
-              AverageSasa = Args.max_sasa
+              AverageSasa = SasaScale.CeilingSasa 
 
-        Neighbors_of_Nitrogens[n]
+        # Neighbors_of_Nitrogens[n]
 
-        # use instance of sasa_scale to calculate weight based on avg sasa of N and C
+        # use instance of sasa_scale to calculate weight based on avg sasa of N and O
         SasaBasedWeight = SasaScale.weigh(AverageSasa)
         # print 
         # print 'AverageSasa', AverageSasa
@@ -251,6 +272,7 @@ def main(argv=None):
   ArgParser.add_argument('-max_sasa',  type=float, default=5.0,  help=' ceiling for cst weighting nitrogen oxygen contacts ')
   ArgParser.add_argument('-max_sasa_weight',  type=float, default=0.1,  help=' weight of ceiling for nitrogen oxygen contacts ')
   ArgParser.add_argument('-sasa_probe_radius', type=float, default=0.8,  help=' probe radius for sasa calculations ')
+  ArgParser.add_argument('-renumber_pose', type=bool, default=True, help='True|False renumber pdb residues ' )
   Args = ArgParser.parse_args()
   
   if len(Args.pdbs[0]) == 1:
@@ -265,9 +287,6 @@ def main(argv=None):
   ReportedRepeatCount = 0
   TotalPdbs = len(Args.pdbs)
 
-  # Instace of Alex's sasa calculator
-  SasaCalculator = AtomicSasaCalculator(probe_radius=Args.sasa_probe_radius)
-
   # Instance of class to convert sasas to cst weight
   SasaScale = sasa_scale( Args.min_sasa, Args.min_sasa_weight, Args.max_sasa, Args.max_sasa_weight )
                        #(FloorSasa, FloorWeight, CeilingSasa, CeilingWeight)
@@ -277,14 +296,19 @@ def main(argv=None):
 
     # Starting rosetta  
     Pose = rosetta.pose_from_pdb(Pdb)
+
     # Sets pdb info so residues in dumped pdbs are same as index 
     Pose.pdb_info(rosetta.core.pose.PDBInfo( Pose ))
-    rosetta.dump_pdb(Pose, 'PoseNumbered.pdb')
+    if Args.renumber_pose:
+      rosetta.dump_pdb(Pose, Pdb)
+    else:
+      rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_renumbered.pdb'))
 
-    # CstName = Pdb.replace('.pdb', '_nc.cst')
-    
-    # with open(CstName, 'w') as CstFile:
-    #   print>>CstFile, '\n'.join(AllConstraints) 
+    AllConstraints = get_pose_nc_constraints(Pose, SasaScale)
+
+    CstName = Pdb.replace('.pdb', '_nc.cst')
+    with open(CstName, 'w') as CstFile:
+      print>>CstFile, '\n'.join(AllConstraints) 
 
     # # Non-rosetta part, this finds primary sequence repeats to duplicate 
     # PdbWDAG = pdb_wdag(Pdb, 3, 4.7, 0.25, 15 )
@@ -331,5 +355,5 @@ def main(argv=None):
       #                                           '-end_C_cap', LastResidue,
       #                                           '-repeat_number', REPEAT_NUMBER])
 
-# if __name__ == "__main__":
-#   sys.exit(main())
+if __name__ == "__main__":
+  sys.exit(main())
