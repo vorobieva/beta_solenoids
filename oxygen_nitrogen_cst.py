@@ -156,7 +156,7 @@ def get_pose_oxy_nitro_constraints(Pose, AlexsSasaCalculator, SasaScale, OxygenG
         if re.match(OxygenGrep, OxyName ):
           # print 'found oxygen %s'%OxyName
           # gets the coordinates from 
-          OxyXyzCoords = np.array( list( Pose.residue(OxyRes).atom(OxyAtm).xyz ) )
+          OxyXyzCoords = np.array( list( Pose.residue(OxyRes).atom(OxyAtm).xyz() ) )
           Oxygens.append( (OxyRes, OxyAtm, OxyName, OxyXyzCoords) )
 
     # assembles array with coordinates of all oxygens
