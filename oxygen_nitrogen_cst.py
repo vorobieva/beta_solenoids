@@ -108,7 +108,7 @@ def consolidate_repeats(ListOfRepeatPositions):
   MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
   return MaxNumberRepeatStarts, TandemIndenticalSpacings
 
-def get_pose_nc_constraints(Pose, SasaScale):
+def get_pose_oxy_nitro_constraints(Pose, SasaScale, OxygenGrep, NitrogenGrep):
     '''  '''
     # SasaCalculator is from Alex's interface_fragment_matching 
     # thanks Alex!
@@ -281,9 +281,6 @@ def main(argv=None):
   if Args.out [-1] != '/':
     Args.out = Args.out + '/'
 
-  OxygenGrep = Args.oxy
-  NitrogenGrep = Args.nitro
-
   ReportedRepeatCount = 0
   TotalPdbs = len(Args.pdbs)
 
@@ -304,7 +301,7 @@ def main(argv=None):
     else:
       rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_renumbered.pdb'))
 
-    AllConstraints = get_pose_nc_constraints(Pose, SasaScale)
+    AllConstraints = get_pose_oxy_nitro_constraints(Pose, SasaScale, Args.oxy, Args.nitro)
 
     CstName = Pdb.replace('.pdb', '_nc.cst')
     with open(CstName, 'w') as CstFile:
