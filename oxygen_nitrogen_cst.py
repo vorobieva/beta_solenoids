@@ -108,13 +108,13 @@ def consolidate_repeats(ListOfRepeatPositions):
   MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
   return MaxNumberRepeatStarts, TandemIndenticalSpacings
 
-def get_pose_oxy_nitro_constraints(Pose, SasaScale, OxygenGrep, NitrogenGrep):
+def get_pose_oxy_nitro_constraints(Pose, AlexsSasaCalculator, SasaScale, OxygenGrep, NitrogenGrep):
     '''  '''
     # SasaCalculator is from Alex's interface_fragment_matching 
     # thanks Alex!
     #
     try:
-      ResidueAtomSasa = AtomicSasaCalculator.calculate_per_atom_sasa(Pose)
+      ResidueAtomSasa = AlexsSasaCalculator.calculate_per_atom_sasa(Pose)
     except NameError:
       print ' Warning: AtomicSasaCalculator import failed, SASA not considered '
 
@@ -284,6 +284,9 @@ def main(argv=None):
   ReportedRepeatCount = 0
   TotalPdbs = len(Args.pdbs)
 
+  # Instace of Alex's sasa calculator
+  SasaCalculator = AtomicSasaCalculator(probe_radius=Args.sasa_probe_radius)
+
   # Instance of class to convert sasas to cst weight
   SasaScale = sasa_scale( Args.min_sasa, Args.min_sasa_weight, Args.max_sasa, Args.max_sasa_weight )
                        #(FloorSasa, FloorWeight, CeilingSasa, CeilingWeight)
@@ -301,7 +304,7 @@ def main(argv=None):
     else:
       rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_renumbered.pdb'))
 
-    AllConstraints = get_pose_oxy_nitro_constraints(Pose, SasaScale, Args.oxy, Args.nitro)
+    AllConstraints = get_pose_oxy_nitro_constraints(Pose, SasaCalculator, SasaScale, Args.oxy, Args.nitro)
 
     CstName = Pdb.replace('.pdb', '_nc.cst')
     with open(CstName, 'w') as CstFile:
