@@ -5,7 +5,7 @@ TO GENERATE BACKBONES AROUND STARTING STRUCTURE
 BY STRECHING REPEAT REGION DESIGNATED BY NUMBER
 '''
 
-# '''
+'''
 # from repo 
 import solenoid_tools
 
@@ -26,93 +26,12 @@ rosetta.init()
 from rosetta.protocols import grafting 
 
 from rosetta.core.pose import initialize_atomid_map
-from rosetta.core.id import AtomID, AtomID_Map_Real, AtomID_Map_bool
+# from rosetta.core.id import AtomID, AtomID_Map_Real, AtomID_Map_bool
 
-pymol_link = rosetta.PyMolMover()
+# pymol_link = rosetta.PyMolMover()
 
 sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 # '''
-
-def fuse(Pose1, Pose2):
-
-
-def append_poses(RepeatPose, JunctionPose, Duplications):
-  ''' 
-    Give two overlapping poses
-  '''
-
-  RepetitivePose = rosetta.Pose()
-  RepetitivePose.assign(RepeatPose)
-  
-  # for Duplication in range(Duplications):
-  RepeatUnitCopy = rosetta.Pose()
-  RepeatUnitCopy.assign(RepeatPose)
-
-  MatchingResidues = solenoid_tools.match_hotspots_and_motifs_to_dock(RepeatPose, JunctionPose, 0.1)
-
-  print 'MatchingResidues', MatchingResidues
-
-  OverhangStart = MatchingResidues[RepeatPose.n_residue()][0] + 1
-
-  OverhangCoordList = [] # for coords of overhang atoms
-  RepeatCoordList = [] # for coords of begining of repeat, which will be superimposed onto those of the overhang atoms to translate protein
-
-  for Repeat0index, OverhangPosition in enumerate( range(OverhangStart, JunctionPose.n_residue()+1) ):
-    RepeatPosition = Repeat0index + 1
-
-    for AtomName in ['N', 'C', 'CA']:
-      OverhangCoordList.append( list(JunctionPose.residue(OverhangPosition).xyz(AtomName)) )
-      RepeatCoordList.append( list(RepeatPose.residue(RepeatPosition).xyz(AtomName)) )
-
-    print RepeatPosition, OverhangPosition
-
-  OverHangArray = np.array(OverhangCoordList)
-  RepeatArray = np.array(RepeatCoordList)
-
-  RMSD, rMtx, tVec = solenoid_tools.rmsd_2_np_arrays_rosetta( OverHangArray, RepeatArray )
-  print 'RMSD:', RMSD
-  rosetta.Pose.apply_transform_Rx_plus_v(RepeatUnitCopy, rMtx, tVec)
-
-
-  if Duplications: # Reset and call recursively ?
-
-    MovedRepeatIdenticalCoordList = []
-    JunctionIdenticalCoordList = []
-    
-    for Res in range( RepeatPose.n_residue() ):
-      if len(MatchingResidues[Res]):
-        assert len(MatchingResidues[Res]) == 1
-        
-        for AtomName in ['N', 'C', 'CA']:
-          MovedRepeatIdenticalCoordList.append( list(RepeatUnitCopy.residue(Res).xyz(AtomName)) )
-          MovedRepeatIdenticalCoordList.append( list(JunctionPose.residue(MatchingResidues[Res][0]).xyz(AtomName)) )
-
-    RepeatIdenticalArray = np.array(MovedRepeatIdenticalCoordList)
-    JunctionIdenticalArray = np.array(JunctionIdenticalCoordList)
-
-    RMSD, rMtx, tVec = solenoid_tools.rmsd_2_np_arrays_rosetta( RepeatIdenticalArray, JunctionIdenticalArray )
-    print 'RMSD:', RMSD  
-    rosetta.Pose.apply_transform_Rx_plus_v(JunctionPose, rMtx, tVec)
-
-    Duplications -= 1
-    append_poses( JunctionPose, Duplications)
-
-  else: 
-
-    # return rMtx, tVec 
-
-def apply_motifs(SubjectPose, MotifPose, MotifsOverSubject):
-   ''' takes subject pose, pose of motif, and list length of subject if 'position' pointer to motif pose residue to apply to that index's position '''
-   for Position in xrange( 1, SubjectPose.n_residue()+1 ):
-
-      if len(MotifsOverSubject[Position]) == 1:
-         # replace_residue( (Pose)arg1, (int)seqpos, (Residue)new_rsd_in, (vector1_pair_string_string)atom_pairs) -> None :
-         SubjectPose.replace_residue(Position, MotifPose.residue( MotifsOverSubject[Position][0] ), True)
-
-      elif len(MotifsOverSubject[Position]) > 1:
-         print 'Randomly selecting residue for position %d '%Position
-         SubjectPose.replace_residue(Position, MotifPose.residue( random.choice( MotifsOverSubject[Position] ) ), True)
-
 
 def repeat_pose_generator(Pose, RepeatStart, RepeatSpacings):
   '''  '''
@@ -122,6 +41,222 @@ def repeat_pose_generator(Pose, RepeatStart, RepeatSpacings):
   RepeatBase = grafting.return_region(Pose, RepeatStart, RepeatEnd)
 
   return RepeatBase
+
+def dump_many_poses(IterablePoses, Tag):
+  for i, Pose in enumerate(IterablePoses):
+    rosetta.dump_pdb( Pose, '%s_n%d.pdb'%(Tag, (1+i)) )
+  
+def fuse(Pose1, Pose2, SubsetSize=2):
+  # Should continue to fiddle with the hardcoded var below,
+  # Originally 0.5, only good for indentical copies,
+  # then 1.5, works for close copy
+  MatchingResidueHash = solenoid_tools.match_superimposed_pose_residues(Pose1, Pose2, 1.5)
+  # checks there is a one to one correspondance for all residue matches
+  for MatchRes in MatchingResidueHash:
+    assert len(MatchingResidueHash[MatchRes]) <= 1
+
+  print 'MatchingResidueHash', MatchingResidueHash
+  
+  # list comprehension through matches, add one for each position with match
+  NofMatchRes = sum([ 1 for Match in MatchingResidueHash if len(MatchingResidueHash[Match]) ])
+  assert SubsetSize <= NofMatchRes, ' Designated subset length should not exceed that of the overlap between poses '
+
+  # contains positions like [ (MatchRes1InPose1, MatchRes1InPose2), (MatchRes2InPose1, MatchRes2InPose2) .. ]
+  CorrespondingResidues = []
+
+  # iterates through positions in pose1
+  for P1 in range( 1, Pose1.n_residue()+1 ):
+    if len(MatchingResidueHash[P1]) == 1:
+      P2 = MatchingResidueHash[P1][0]
+      CorrespondingResidues.append((P1, P2))
+
+  LengthIncenative = 1.2
+  BestRMSD = 999
+  BestSubset = []
+  BestTransformation = ()
+
+  for i in range( len(CorrespondingResidues) - SubsetSize + 1):
+    Pose1Coords = []
+    Pose2Coords = []    
+    IterationsSubset = CorrespondingResidues[i:i+SubsetSize]
+    for ResidueMatch in IterationsSubset:
+      P1 = ResidueMatch[0]
+      P2 = ResidueMatch[1]
+      for AtomName in ['N','C','O','CA']:
+        Pose1Coords.append( list(Pose1.residue(P1).xyz(AtomName)) )
+        Pose2Coords.append( list(Pose2.residue(P2).xyz(AtomName)) )      
+    # makes (subset length)by3 array out of list of lists
+ 
+    Pose1Array = np.array(Pose1Coords)
+    Pose2Array = np.array(Pose2Coords)
+
+    RMSD, Rotation, Translation = solenoid_tools.rmsd_2_np_arrays_rosetta(Pose1Array, Pose2Array)
+
+    if RMSD < BestRMSD:
+      BestRMSD = RMSD
+      BestSubset = IterationsSubset
+      BestTransformation = ( Rotation, Translation )
+
+  # Unpack within overlap subset and corresponding transformation vectors 
+  Rotation, Translation = BestTransformation
+  rosetta.Pose.apply_transform_Rx_plus_v(Pose2, Rotation, Translation)
+
+  # print 'BestSubset', BestSubset
+  # make a lot of sense for even overlaps, makes less sense for odd overlaps
+  Cutpoint = SubsetSize / 2
+  EndOfPose1 = BestSubset[Cutpoint-1][0]
+  StartOfPose2 = BestSubset[Cutpoint][1]
+
+  # print 'EndOfPose1', EndOfPose1
+  # print 'StartOfPose2', StartOfPose2
+  FusionPose = grafting.return_region(Pose1, 1, EndOfPose1)
+  rosetta.dump_pdb(FusionPose, 'FusionPose1.pdb')
+  for Pose2Position in range( StartOfPose2, Pose2.n_residue()+1 ):
+    Pose2Residue = Pose2.residue(Pose2Position)
+    FusionPose.append_residue_by_bond(Pose2Residue)
+  
+  return FusionPose, BestRMSD, CorrespondingResidues
+
+def append_poses(Repeat1Pose, Repeat2Pose, Duplications):
+  '''  MUST give two overlapping, equal length, one-repeat-unit long poses !!!  '''
+  assert Repeat1Pose.n_residue() == Repeat2Pose.n_residue(), ' Repeat poses must be same length '
+  RepeatLength = Repeat1Pose.n_residue()
+  Residues = [P for P in range(1, RepeatLength+1)]
+ 
+  # First fusion is easy since the input poses contain duplicate residues
+  FusionPose, RMSD, CorrespondingResidues = fuse(Repeat1Pose, Repeat2Pose)
+  # Copy and store first subunit as base unit for subsequent transformations/fusions 
+  FusionBasePose = rosetta.Pose()
+  FusionBasePose.assign(FusionPose)
+  rosetta.dump_pdb(FusionBasePose, 'FusionBasePose.pdb')
+
+  # Umatched region should be N terminal region of repeat pose 1 without matching pose 2 residues
+  # Used repeated during loop below to superimpose on to end of growing fusion pose
+  UnmatchedPose1Residues = [ Number for Number in range(1, CorrespondingResidues[0][0]) ]
+  Pose1UnmatchedCoordList = []
+
+  for UnmatchResidue in UnmatchedPose1Residues:
+    for AtomName in ['N','C','O','CA']:
+      Pose1UnmatchedCoordList.append( list(Repeat1Pose.residue(UnmatchResidue).xyz(AtomName)) )
+    Pose1UnmatchedArray = np.array(Pose1UnmatchedCoordList)
+  
+  # one iteration is run for each duplication event, 
+  # each time add a fusion pose to end of growing 
+  for Duplication in range(Duplications):
+    
+    # Grabs residue from back of RepeatPose2 for each unmatched residue at begining of Pose1
+    EndMatch = []
+    # also start making array of coord
+    for UnmatchResidue in UnmatchedPose1Residues:
+      EndMatch.append(Residues[-1*UnmatchResidue])
+
+    EndMatch.reverse()
+    EndMatchCoordList = []
+    for ExtensionResidue in EndMatch:
+      for AtomName in ['N','C','O','CA']:
+        EndMatchCoordList.append( list(Repeat2Pose.residue(ExtensionResidue).xyz(AtomName)) )
+    EndMatchArray = np.array(EndMatchCoordList)
+
+    print 'EndMatch', EndMatch
+    RMSD, rMtx, tVec = solenoid_tools.rmsd_2_np_arrays_rosetta( EndMatchArray, Pose1UnmatchedArray )
+    # print 'Corse RMSD:  ', RMSD
+    # print 'rMtx:  ', rMtx
+    # print 'tVec:  ', tVec
+
+    DuplicatePose = rosetta.Pose()
+    DuplicatePose.assign(FusionBasePose)
+    rosetta.Pose.apply_transform_Rx_plus_v(DuplicatePose, rMtx, tVec)
+
+    rose.dump_pdb(FusionPose, 'FusionPose.pdb')
+    rose.dump_pdb(DuplicatePose, 'DuplicatePose.pdb')
+
+    FusionPose, RMSD, CorrespondingResidues = fuse(FusionPose, DuplicatePose)
+    print 'Refined RMSD', RMSD
+    
+    FusionResidues = [ P for P in range(1, FusionPose.n_residue() + 1) ]
+    print 'FusionResidues', FusionResidues
+    FusionExtension = []
+  
+    # rosetta.dump_pdb(FusedPose, 'FusedPose.pdb')
+
+
+  return FusedPose
+
+  # RepetitivePose = rosetta.Pose()
+  # RepetitivePose.assign(RepeatPose)
+  
+  # # for Duplication in range(Duplications):
+  # RepeatUnitCopy = rosetta.Pose()
+  # RepeatUnitCopy.assign(RepeatPose)
+
+
+
+  # MatchingResidues = solenoid_tools.match_superimposed_pose_residues(RepeatPose, JunctionPose, 0.1)
+
+  # print 'MatchingResidues', MatchingResidues
+
+  # OverhangStart = MatchingResidues[RepeatPose.n_residue()][0] + 1
+
+  # OverhangCoordList = [] # for coords of overhang atoms
+  # RepeatCoordList = [] # for coords of begining of repeat, which will be superimposed onto those of the overhang atoms to translate protein
+
+  # for Repeat0index, OverhangPosition in enumerate( range(OverhangStart, JunctionPose.n_residue()+1) ):
+  #   RepeatPosition = Repeat0index + 1
+
+  #   for AtomName in ['N', 'C', 'CA']:
+  #     OverhangCoordList.append( list(JunctionPose.residue(OverhangPosition).xyz(AtomName)) )
+  #     RepeatCoordList.append( list(RepeatPose.residue(RepeatPosition).xyz(AtomName)) )
+
+  #   print RepeatPosition, OverhangPosition
+
+  # OverHangArray = np.array(OverhangCoordList)
+  # RepeatArray = np.array(RepeatCoordList)
+
+  # RMSD, rMtx, tVec = solenoid_tools.rmsd_2_np_arrays_rosetta( OverHangArray, RepeatArray )
+  # print 'RMSD:', RMSD
+  # rosetta.Pose.apply_transform_Rx_plus_v(RepeatUnitCopy, rMtx, tVec)
+
+  # BestRMSD
+
+  # if Duplications: # Reset and call recursively ?
+
+  #   MovedRepeatIdenticalCoordList = []
+  #   JunctionIdenticalCoordList = []
+    
+  #   for Res in range( RepeatPose.n_residue() ):
+  #     if len(MatchingResidues[Res]):
+  #       assert len(MatchingResidues[Res]) == 1
+        
+  #       for AtomName in ['N', 'C', 'CA']:
+  #         MovedRepeatIdenticalCoordList.append( list(RepeatUnitCopy.residue(Res).xyz(AtomName)) )
+  #         MovedRepeatIdenticalCoordList.append( list(JunctionPose.residue(MatchingResidues[Res][0]).xyz(AtomName)) )
+
+  #   RepeatIdenticalArray = np.array(MovedRepeatIdenticalCoordList)
+  #   JunctionIdenticalArray = np.array(JunctionIdenticalCoordList)
+
+  #   RMSD, rMtx, tVec = solenoid_tools.rmsd_2_np_arrays_rosetta( RepeatIdenticalArray, JunctionIdenticalArray )
+  #   print 'RMSD:', RMSD  
+  #   rosetta.Pose.apply_transform_Rx_plus_v(JunctionPose, rMtx, tVec)
+
+  #   Duplications -= 1
+  #   append_poses( JunctionPose, Duplications)
+
+  # else: 
+
+    # return rMtx, tVec 
+
+# def apply_motifs(SubjectPose, MotifPose, MotifsOverSubject):
+#    ''' takes subject pose, pose of motif, and list length of subject if 'position' pointer to motif pose residue to apply to that index's position '''
+#    for Position in xrange( 1, SubjectPose.n_residue()+1 ):
+
+#       if len(MotifsOverSubject[Position]) == 1:
+#          # replace_residue( (Pose)arg1, (int)seqpos, (Residue)new_rsd_in, (vector1_pair_string_string)atom_pairs) -> None :
+#          SubjectPose.replace_residue(Position, MotifPose.residue( MotifsOverSubject[Position][0] ), True)
+
+#       elif len(MotifsOverSubject[Position]) > 1:
+#          print 'Randomly selecting residue for position %d '%Position
+#          SubjectPose.replace_residue(Position, MotifPose.residue( random.choice( MotifsOverSubject[Position] ) ), True)
+
 
 def mcmc_mover(Pose, ScoreFunction, kT=1.0, Gen=100):
   ''' threadable backbone breathing and side chain repacking with constraints '''
@@ -280,9 +415,9 @@ def main(argv=None):
   # ScoreFunction.set_weight(rosetta.atom_pair_constraint, 5.0)
 
   for Pdb in Args.pdbs:
-    
     # load Pdb
     Pose = rosetta.pose_from_pdb(Pdb)
+    Pose.pdb_info(rosetta.core.pose.PDBInfo( Pose ))
 
     # Non-rosetta part, together these four lines finds primary sequence repeats to duplicate     
     wDag = pose_wdag(Pose) # default settings are for beta solenoids !
@@ -299,9 +434,7 @@ def main(argv=None):
         if RepeatSegmentPose.residue(Res).name() == 'CYD':
           rosetta.core.conformation.change_cys_state(Res, 'CYS', RepeatSegmentPose.conformation())
 
-    #   append_poses
-
-      RepeatPoses.append(Pose)
+      RepeatPoses.append(RepeatSegmentPose)
     return RepeatPoses
 
     # Rosetta part
