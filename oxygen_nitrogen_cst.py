@@ -114,9 +114,9 @@ def get_pose_oxy_nitro_constraints(Pose, SasaScale, OxygenGrep, NitrogenGrep):
     # thanks Alex!
     #
     try:
-      ResidueAtomSasa = SasaCalculator.calculate_per_atom_sasa(Pose)
-    except:
-      ResidueAtomSasa = SasaCalculator.calculate_per_atom_sasa(Pose)
+      ResidueAtomSasa = AtomicSasaCalculator.calculate_per_atom_sasa(Pose)
+    except NameError:
+      print ' Warning: AtomicSasaCalculator import failed, SASA not considered '
 
     # for making full atom kd tree
     ResAtmCoordLists = []
