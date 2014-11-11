@@ -6,6 +6,111 @@ rosetta.init()
 from scipy import spatial
 import numpy as np
 
+class alpha_carbon:
+  """ Calpha node for wDAG searches of proteins for repeats """
+  def __init__(self, Number, CoordinateArray):
+    if type(CoordinateArray) == list:
+      CoordinateArray = np.array(CoordinateArray)
+    self.CoordinateArray = CoordinateArray
+    self.Number = int(Number)
+    self.DownstreamNeighbors = {} # keyed with residue number, value is displacement vector to that residue's own CA
+
+class pose_wdag:
+  """ Init method takes protein and spawns Calpha instances to populate """
+  def __init__( self, Pose, MinRepeats=2, DistanceTarget=4.7, DistanceFlex=0.5, AngleFlex=15.0 ):
+    # Pose = Pose
+    self.MinRepeats = MinRepeats
+    self.DistanceTarget = DistanceTarget
+    self.DistanceFlex = DistanceFlex
+    self.AngleFlex = np.radians(AngleFlex) # converts to radians
+
+    # make instance of alpha_carbon for each row
+    self.CalphaInstances = []
+    CalphaCoords = []
+    for P in range( 1, Pose.n_residue() + 1):
+      print P
+      print Pose.residue(P)
+      print Pose.residue(P).xyz('CA')
+      CoordList = [Value for Value in Pose.residue(P).xyz('CA') ]
+      print CoordList
+      CoordList = list( Pose.residue(P).xyz('CA') )
+      print CoordList
+      print '\n*2'
+      self.CalphaInstances.append( alpha_carbon(P, CoordList) )
+      CalphaCoords.append( CoordList )
+
+    self.CalphaArray = np.array(CalphaCoords)
+
+
+  def find_repeat_chains(self):
+    CheckRedundancyChecker = {}
+    Repeats = []
+    Count = 0
+    for Calpha in self.CalphaInstances:
+      for NeighborNumber in Calpha.DownstreamNeighbors:
+        '''
+        Repeat chains start with each of Calphas downstream neighbors 
+        and are recursively extended so long as VecA ~= VecB
+        
+           VecA      VecB
+        CA- - - > CA- - - > CA
+        '''
+        Count += 1
+        RepeatChain = [ Calpha.Number ]
+        RecursiveCalpha = Calpha
+        DownstreamNumber = NeighborNumber
+        
+        try:
+          CheckRedundancyChecker['%d_%d'%(Calpha.Number, DownstreamNumber)]
+
+        except KeyError:
+          ChainExtended = 1
+
+        while ChainExtended:
+          RepeatChain.append(DownstreamNumber)
+          DownstreamCalpha = self.CalphaDict[DownstreamNumber]          
+          VectorA = RecursiveCalpha.DownstreamNeighbors[DownstreamNumber]
+          
+          ChainExtended = 0 # not extended unless valid extension found
+          for NextDownstreamNumber in DownstreamCalpha.DownstreamNeighbors:
+            
+            # To prevent redundant calculations, upstream downstream pairs already investigated aren't considered         
+            try:
+              CheckRedundancyChecker['%d_%d'%(DownstreamNumber, NextDownstreamNumber)]
+            # only residue pairs not in redundancy checking dictionary are considering
+            except KeyError:
+              VectorB = DownstreamCalpha.DownstreamNeighbors[NextDownstreamNumber]
+            
+              if spatial.distance.cosine(VectorA, VectorB) < self.AngleFlex:
+                CheckRedundancyChecker['%d_%d'%(DownstreamNumber, NextDownstreamNumber)] = True
+                DownstreamNumber = NextDownstreamNumber
+                RecursiveCalpha = DownstreamCalpha
+                ChainExtended = 1
+                break
+
+        if len(RepeatChain) >= self.MinRepeats:
+          Repeats.append(RepeatChain)
+          # print 'select repeat%d, resi %s'%(Count,'+'.join([str(Number).split('.')[0] for Number in RepeatChain]))
+
+    return Repeats
+
+  def find_downstream_neighbors(self):
+    ''' To set up DAG Calphas become nodes'''
+    self.CalphaDict = {}
+    for i, Instance in enumerate(self.CalphaInstances):
+      # To make the graph directed, repeat chains will always be arranged from 
+      for Subsequent in self.CalphaInstances[i:]:
+        # Displacement from lower numbered residue to higher number
+        Displacement = Subsequent.CoordinateArray - Instance.CoordinateArray
+        # Magnitute of displacement vector
+        Distance = (np.sum([Component**2 for Component in Displacement]))**0.5
+        # check if displacement of given Instance (upstream) and Subsequent (downstream) has magnitute within target range
+        if np.abs(Distance - self.DistanceTarget) <= self.DistanceFlex:
+          # if in range record Subsequent as downstream neighbor 
+          Instance.DownstreamNeighbors[Subsequent.Number] = Displacement
+      # add residue alpha carbon instance to dictionary
+      self.CalphaDict[Instance.Number] = Instance
+
 
 def consolidate_repeats(ListOfRepeatPositions):
   
@@ -148,129 +253,30 @@ def parse_motif_pose_coords(Pose):
    return CoordArray, CoordHash
 
 def match_superimposed_pose_residues(Pose1, Pose2, MaxDist=1.0):
-   ''' uses scipy.spatial.KDTree to find motif's w/in 1.0 of docked pose positions 
-   returns list or array of lists
-       If x is a single point, returns a list of the indices of the neighbors of x. 
-       If x is an array of points, returns an object array of shape tuple containing lists of neighbors. " '''
-   Pose1CoordArray, Pose1CoordHash = parse_motif_pose_coords(Pose1)
-   Pose2Array, Pose2Hash = parse_motif_pose_coords(Pose2)
+  ''' uses scipy.spatial.KDTree to find motif's w/in 1.0 of docked pose positions 
+  returns list or array of lists
+     If x is a single point, returns a list of the indices of the neighbors of x. 
+     If x is an array of points, returns an object array of shape tuple containing lists of neighbors. " '''
+  Pose1CoordArray, Pose1CoordHash = parse_motif_pose_coords(Pose1)
+  Pose2Array, Pose2Hash = parse_motif_pose_coords(Pose2)
 
-   Pose2Tree = spatial.KDTree(Pose2Array)
-   # KDtree documentation is from http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.KDTree.query_ball_point.html#scipy.spatial.KDTree.query_ball_point
+  Pose2Tree = spatial.KDTree(Pose2Array)
+  # KDtree documentation is from http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.KDTree.query_ball_point.html#scipy.spatial.KDTree.query_ball_point
 
-   # KDTree.query_ball_point(x, r, p = 2.0, eps = 0)
-   # Find all points within distance r of point(s) x.
-   #
-   # Parameters:   
-   # x : array_like, shape tuple + (self.m,)
-   # The point or points to search for neighbors of.
-   # r : positive float
-   #
-   # Returns the radius of points to return.
-   Pose1_Coords_by_Pose2_Coords = Pose2Tree.query_ball_point(Pose1CoordArray, MaxDist)
-   # from 0 indexing to 1 indexing
-   Pose1_Coords_by_Pose2_Coords = { PositionIndex+1 :[ Index+1 for Index in PositionResidues ] for PositionIndex, PositionResidues in enumerate(Pose1_Coords_by_Pose2_Coords) }
+  # KDTree.query_ball_point(x, r, p = 2.0, eps = 0)
+  # Find all points within distance r of point(s) x.
+  #
+  # Parameters:   
+  # x : array_like, shape tuple + (self.m,)
+  # The point or points to search for neighbors of.
+  # r : positive float
+  #
+  # Returns the radius of points to return.
+  Pose1_Coords_by_Pose2_Coords = Pose2Tree.query_ball_point(Pose1CoordArray, MaxDist)
+  # from 0 indexing to 1 indexing
+  Pose1_Coords_by_Pose2_Coords = { PositionIndex+1 :[ Index+1 for Index in PositionResidues ] for PositionIndex, PositionResidues in enumerate(Pose1_Coords_by_Pose2_Coords) }
 
-   return Pose1_Coords_by_Pose2_Coords
-
-
-class alpha_carbon:
-  """ Calpha node for wDAG searches of proteins for repeats """
-  def __init__(self, Number, CoordinateArray):
-    if type(CoordinateArray) == list:
-      CoordinateArray = np.array(CoordinateArray)
-    self.CoordinateArray = CoordinateArray
-    self.Number = int(Number)
-    self.DownstreamNeighbors = {} # keyed with residue number, value is displacement vector to that residue's own CA
-
-class pose_wdag:
-  """ 'wDag' is a little generous. Init method takes protein and spawns Calpha instances to populate """
-  def __init__( self, Pose, MinRepeats=2, DistanceTarget=4.7, DistanceFlex=0.5, AngleFlex=15.0 ):
-    self.Pose = Pose
-    self.MinRepeats = MinRepeats
-    self.DistanceTarget = DistanceTarget
-    self.DistanceFlex = DistanceFlex
-    self.AngleFlex = np.radians(AngleFlex) # converts to radians
-
-    # make instance of alpha_carbon for each row
-    self.CalphaInstances = []
-    CalphaCoords = []
-    for P in range(Pose.n_residue()):
-      CoordList = list( self.Pose.residue(P).xyz('CA') )
-      self.CalphaInstances.append( alpha_carbon(P, CoordList) )
-      CalphaCoords.append( CoordList )
-
-    self.CalphaArray = np.array(CalphaCoords)
-
-
-  def find_repeat_chains(self):
-    CheckRedundancyChecker = {}
-    Repeats = []
-    Count = 0
-    for Calpha in self.CalphaInstances:
-      for NeighborNumber in Calpha.DownstreamNeighbors:
-        '''
-        Repeat chains start with each of Calphas downstream neighbors 
-        and are recursively extended so long as VecA ~= VecB
-        
-           VecA      VecB
-        CA- - - > CA- - - > CA
-        '''
-        Count += 1
-        RepeatChain = [ Calpha.Number ]
-        RecursiveCalpha = Calpha
-        DownstreamNumber = NeighborNumber
-        
-        try:
-          CheckRedundancyChecker['%d_%d'%(Calpha.Number, DownstreamNumber)]
-
-        except KeyError:
-          ChainExtended = 1
-
-        while ChainExtended:
-          RepeatChain.append(DownstreamNumber)
-          DownstreamCalpha = self.CalphaDict[DownstreamNumber]          
-          VectorA = RecursiveCalpha.DownstreamNeighbors[DownstreamNumber]
-          
-          ChainExtended = 0 # not extended unless valid extension found
-          for NextDownstreamNumber in DownstreamCalpha.DownstreamNeighbors:
-            
-            # To prevent redundant calculations, upstream downstream pairs already investigated aren't considered         
-            try:
-              CheckRedundancyChecker['%d_%d'%(DownstreamNumber, NextDownstreamNumber)]
-            # only residue pairs not in redundancy checking dictionary are considering
-            except KeyError:
-              VectorB = DownstreamCalpha.DownstreamNeighbors[NextDownstreamNumber]
-            
-              if spatial.distance.cosine(VectorA, VectorB) < self.AngleFlex:
-                CheckRedundancyChecker['%d_%d'%(DownstreamNumber, NextDownstreamNumber)] = True
-                DownstreamNumber = NextDownstreamNumber
-                RecursiveCalpha = DownstreamCalpha
-                ChainExtended = 1
-                break
-
-        if len(RepeatChain) >= self.MinRepeats:
-          Repeats.append(RepeatChain)
-          # print 'select repeat%d, resi %s'%(Count,'+'.join([str(Number).split('.')[0] for Number in RepeatChain]))
-
-    return Repeats
-
-  def find_downstream_neighbors(self):
-    ''' To set up DAG Calphas become nodes'''
-    self.CalphaDict = {}
-    for i, Instance in enumerate(self.CalphaInstances):
-      # To make the graph directed, repeat chains will always be arranged from 
-      for Subsequent in self.CalphaInstances[i:]:
-        # Displacement from lower numbered residue to higher number
-        Displacement = Subsequent.CoordinateArray - Instance.CoordinateArray
-        # Magnitute of displacement vector
-        Distance = (np.sum([Component**2 for Component in Displacement]))**0.5
-        # check if displacement of given Instance (upstream) and Subsequent (downstream) has magnitute within target range
-        if np.abs(Distance - self.DistanceTarget) <= self.DistanceFlex:
-          # if in range record Subsequent as downstream neighbor 
-          Instance.DownstreamNeighbors[Subsequent.Number] = Displacement
-      # add residue alpha carbon instance to dictionary
-      self.CalphaDict[Instance.Number] = Instance
+  return Pose1_Coords_by_Pose2_Coords
 
 
   def pdb_coord_array(self, Pdb):
