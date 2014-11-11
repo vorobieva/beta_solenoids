@@ -284,3 +284,9 @@ class pose_wdag:
     self.ResidueIndentityDict = { int(Line[22:26]) : ThreeToOne[Line[17:20]] for Line in CalphaLines}
     return np.array( CalphaValues )
 
+
+def main(argv=None):
+  print 'no main function'
+
+if __name__ == "__main__":
+  sys.exit(main())

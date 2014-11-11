@@ -9,15 +9,8 @@ This script is to generate ATOMPAIR constraints for Rosetta,
 
 '''
 
-# comment just next line and copy block in 
-# multiline string for ipython mode
-
+# uncomment just next line and copy block in multiline string for ipython mode
 # '''
-# This is used to give buried N - O contacts more weight. Thanks Alex Ford!
-try:
-  from interface_fragment_matching.utility.analysis import AtomicSasaCalculator
-except ImportError:
-  ' Error: SASA weighting of contacts requires interface_fragment_matching from Alex Ford '
 
 import tools
 
@@ -30,10 +23,10 @@ import sys
 import os
 import re
 
-import rosetta
-rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
+# import rosetta
+# rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
 
-# ''', sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
+# ''', #sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 
 ThreeToOne = {'GLY':'G','ALA':'A','VAL':'V','LEU':'L','ILE':'I','MET':'M','PRO':'P','PHE':'F','TRP':'W','SER':'S','THR':'T','ASN':'N','GLN':'Q','TYR':'Y','CYS':'C','CYD':'C','LYS':'K','ARG':'R','HIS':'H','ASP':'D','GLU':'E','STO':'*','UNK':'U'}
 ChainAlphabetIndices = {'A':1, 'B':2, 'C':3, 'D':4, 'E':5, 'F':6, 'G':7, 'H':8, 'I':9, 'J':10, 'K':11, 'L':12, 'M':13, 'N':14, 'O':15, 'P':16, 'Q':17, 'R':18, 'S':19, 'T':20, 'U':21, 'V':22, 'W':23, 'X':24, 'Y':25, 'Z':26 }
@@ -108,15 +101,19 @@ def consolidate_repeats(ListOfRepeatPositions):
   MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
   return MaxNumberRepeatStarts, TandemIndenticalSpacings
 
-def get_pose_oxy_nitro_constraints(Pose, AlexsSasaCalculator, SasaScale, OxygenGrep, NitrogenGrep):
+def get_pose_oxy_nitro_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaScale, OxygenGrep, NitrogenGrep):
     '''  '''
-    # SasaCalculator is from Alex's interface_fragment_matching 
+    # AlexsSasaCalculator is from Alex's interface_fragment_matching 
     # thanks Alex!
     #
+     # This is used to give buried N - O contacts more weight. Thanks Alex Ford!
     try:
-      ResidueAtomSasa = AlexsSasaCalculator.calculate_per_atom_sasa(Pose)
-    except NameError:
-      print ' Warning: AtomicSasaCalculator import failed, SASA not considered '
+      from interface_fragment_matching.utility.analysis import AtomicSasaCalculator
+      # make instace of Alex's sasa calculator
+      AlexsSasaCalculator = AtomicSasaCalculator(probe_radius=SasaRadius)
+      ResidueAtomSasa = AlexsSasaCalculator.calculate_per_atom_sasa(Pose)    
+    except ImportError:
+      ' Error: SASA weighting of contacts requires interface_fragment_matching from Alex Ford '
 
     # for making full atom kd tree
     ResAtmCoordLists = []
@@ -162,11 +159,14 @@ def get_pose_oxy_nitro_constraints(Pose, AlexsSasaCalculator, SasaScale, OxygenG
     # assembles array with coordinates of all oxygens
     All_Oxygen_Array = np.array([ Oxy[3] for Oxy in Oxygens ])
     # Query KDtree for atoms within -max_dist from oxygens
-    Neighbors_of_Oxygens = ResidueAtomKDTree.query_ball_point( All_Oxygen_Array, Args.max_dist )
+    Neighbors_of_Oxygens = ResidueAtomKDTree.query_ball_point( All_Oxygen_Array, MaxDist )
 
     # holds constraints before printing
-    AllConstraints = []    
-    # ConstraintsByResidue = []
+    AllConstraints = [] 
+    # holds sorted cst
+    AllBackboneBackboneCst = []
+    AllBackboneSidechainCst = []
+    AllSidechainSidechainCst = []
 
     # Loop through oxygens
     for o, Oxy in enumerate(Oxygens):
@@ -186,57 +186,71 @@ def get_pose_oxy_nitro_constraints(Pose, AlexsSasaCalculator, SasaScale, OxygenG
         if re.match( NitrogenGrep, NitroName ):
           # checks primary sequence spacing
           # to remove set:  -min_seq_sep 0
-          if np.abs(OxyRes - NitroRes) >= Args.min_seq_sep:
+          if np.abs(OxyRes - NitroRes) >= MinPositionSeperation:
             # print 'found nitrogen neighbor %s'%NitroName
             NitroXyzCoords = list(Pose.residue(NitroRes).atom(NitroAtm).xyz())
             # print 'NitroRes, NitroName', NitroRes, NitroName
             # print 'NitroXyzCoords', NitroXyzCoords
             Nitrogens.append((NitroRes, NitroAtm, NitroName, NitroXyzCoords))
+        
         elif 'N' in NitroName:
           print 'skipping atom named: %s , make sure it is not a nitrogen'%NitroName
 
-      Distance = tools.vector_magnitude(NitroXyzCoords - OxyXyzCoords)
 
       if len(Nitrogens):
         Neighbor_Coordinates = [Nitro[3] for Nitro in Nitrogens]
         # print 'Neighbor_Coordinates', Neighbor_Coordinates[0:4], Neighbor_Coordinates[-4:]
         # Query KDtree for atoms closer than -max_dist from oxygens
         Neighbors_of_Oxygen_Array = np.array(Neighbor_Coordinates)
-        Nearer_Distance = Distance * 0.9
         # print 'Neighbors_of_Oxygen_Array', Neighbors_of_Oxygen_Array
-        Neighbors_of_Nitrogens = ResidueAtomKDTree.query_ball_point( Neighbors_of_Oxygen_Array, Nearer_Distance )
+        Neighbors_of_Nitrogens = ResidueAtomKDTree.query_ball_point( Neighbors_of_Oxygen_Array, 2.0 )
       
       Constraints = []
+      BackboneBackboneCst = []
+      BackboneSidechainCst = []
+      SidechainSidechainCst = []
+
       #  Loop through all nitrogen neighbors of oxygen
       for n, Nitro in enumerate(Nitrogens):
         # unpack Nitro tuple
         NitroRes, NitroAtm, NitroName, NitroXyzCoords = Nitro
+        Distance = tools.vector_magnitude(NitroXyzCoords - OxyXyzCoords)
 
         # these trys / excepts seperate 
         # backbone-backbone from 
         # backbone-sidechain from
         # sidechain-sidechain interactions
         # 
-        # in future maybe sort into seperate lists
+        # in future maybe sort into seperate lists, shouldn't rely on ResidueAtomSasa to know what is in backbone
         try:
           OxygenSasa = ResidueAtomSasa[OxyRes][OxyName]
           NitrogenSasa = ResidueAtomSasa[NitroRes][NitroName]
           AverageSasa = np.mean([OxygenSasa, NitrogenSasa])        
+          BBBB = 1
+          BBSC = SCSC = 0
         except KeyError:
+          
           # These lines handle backbone to sidechain interactions
           # set weight equal to the most buried 
           try:
             OxygenSasa = ResidueAtomSasa[OxyRes][OxyName]
             AverageSasa = SasaScale.FloorSasa
+            BBSC = 1
+            BBBB = SCSC = 0
           except KeyError:
             try:
               NitrogenSasa = ResidueAtomSasa[NitroRes][NitroName]
               AverageSasa = SasaScale.FloorSasa 
+              BBSC = 1
+              BBBB = SCSC = 0            
             
             # set weight of side chain side chain equal to the most buried             
             except KeyError:
               AverageSasa = SasaScale.CeilingSasa 
-
+              SCSC = 1
+              BBSC = BBBB = 0
+        
+        ## in future, use neighbors for angles along with AtomPairs
         # Neighbors_of_Nitrogens[n]
 
         # use instance of sasa_scale to calculate weight based on avg sasa of N and O
@@ -245,12 +259,21 @@ def get_pose_oxy_nitro_constraints(Pose, AlexsSasaCalculator, SasaScale, OxygenG
         # print 'AverageSasa', AverageSasa
         # print 'SasaBasedWeight', SasaBasedWeight
         # adds atom pair constraint to list of constraints
-        Constraints.append('AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f SUMFUNC 2 HARMONIC %.2f 1.0 CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, SasaBasedWeight, Distance ))
-      
-      AllConstraints.extend(Constraints)
-      # ConstraintsByResidue.append(Constraints)
+        DistanceCst = 'AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f SUMFUNC 2 HARMONIC %.2f 1.0 CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, SasaBasedWeight, Distance )
+        Constraints.append(DistanceCst)
+        
+        if BBBB: BackboneBackboneCst.append(DistanceCst)
+        if BBSC: BackboneSidechainCst.append(DistanceCst)
+        if SCSC: SidechainSidechainCst.append(DistanceCst)
 
-    return AllConstraints
+      AllConstraints.extend(Constraints)
+      AllBackboneBackboneCst.extend(BackboneBackboneCst)
+      AllBackboneSidechainCst.extend(BackboneSidechainCst)
+      AllSidechainSidechainCst.extend(SidechainSidechainCst)
+
+    SortedConstraints = (AllBackboneBackboneCst, AllBackboneSidechainCst, AllSidechainSidechainCst)
+
+    return AllConstraints, SortedConstraints
 
 
 def main(argv=None):
@@ -262,7 +285,7 @@ def main(argv=None):
   ArgParser.add_argument('-pdbs', type=list, help=' input pdbs ', required=True)
   ArgParser.add_argument('-out', type=str, help=' output directory ', required=True)
   # Optional arguments:
-  ArgParser.add_argument('-max_dist', type=float, default=3.2, help=' distance between the oxygens and nitrogens ')
+  ArgParser.add_argument('-max_dist', type=float, default=3.4, help=' distance between the oxygens and nitrogens ')
   ArgParser.add_argument('-min_seq_sep', type=int, default=3, help=' minimum seperation in primary sequece ')
   ArgParser.add_argument('-oxy', type=str, default='O\w?\d?', help=' grep for oxygen atoms ')
   ArgParser.add_argument('-nitro', type=str, default='N\w?\d?', help=' grep for nitrogen atoms ')
@@ -281,11 +304,11 @@ def main(argv=None):
   if Args.out [-1] != '/':
     Args.out = Args.out + '/'
 
+  import rosetta
+  rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
+
   ReportedRepeatCount = 0
   TotalPdbs = len(Args.pdbs)
-
-  # Instace of Alex's sasa calculator
-  SasaCalculator = AtomicSasaCalculator(probe_radius=Args.sasa_probe_radius)
 
   # Instance of class to convert sasas to cst weight
   SasaScale = sasa_scale( Args.min_sasa, Args.min_sasa_weight, Args.max_sasa, Args.max_sasa_weight )
@@ -304,11 +327,23 @@ def main(argv=None):
     else:
       rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_renumbered.pdb'))
 
-    AllConstraints = get_pose_oxy_nitro_constraints(Pose, SasaCalculator, SasaScale, Args.oxy, Args.nitro)
-
-    CstName = Pdb.replace('.pdb', '_nc.cst')
+    AllConstraints, SortedConstraints = get_pose_oxy_nitro_constraints(Pose, Args.max_dist, Args.min_seq_sep, Args.sasa_probe_radius, SasaScale, Args.oxy, Args.nitro)
+    
+    CstName = Pdb.replace('.pdb', '_ON.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(AllConstraints) 
+
+    BackboneBackboneCst, BackboneSidechainCst, SidechainSidechainCst = SortedConstraints
+
+    CstName = Pdb.replace('.pdb', '_ON_BBBB.cst')
+    with open(CstName, 'w') as CstFile:
+      print>>CstFile, '\n'.join(BackboneBackboneCst) 
+    CstName = Pdb.replace('.pdb', '_ON_BBSC.cst')
+    with open(CstName, 'w') as CstFile:
+      print>>CstFile, '\n'.join(BackboneSidechainCst) 
+    CstName = Pdb.replace('.pdb', '_ON_SCSC.cst')
+    with open(CstName, 'w') as CstFile:
+      print>>CstFile, '\n'.join(SidechainSidechainCst) 
 
     # # Non-rosetta part, this finds primary sequence repeats to duplicate 
     # PdbWDAG = pdb_wdag(Pdb, 3, 4.7, 0.25, 15 )
