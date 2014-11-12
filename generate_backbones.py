@@ -5,7 +5,7 @@ TO GENERATE BACKBONES AROUND STARTING STRUCTURE
 BY STRECHING REPEAT REGION DESIGNATED BY NUMBER
 '''
 
-'''
+# '''
 # from repo 
 import solenoid_tools
 
@@ -264,21 +264,27 @@ class constraint_extrapolator:
       except:
         continue
       # print        
-      print 'ArchetypePosition: ', ArchetypePosition
-      print 'shifted: ', self.shift(ArchetypePosition)
-      print 'ArchetypePositionCstDict: ', ArchetypePositionCstDict
+      # print 'ArchetypePosition: ', ArchetypePosition
+      # print 'shifted: ', self.shift(ArchetypePosition)
+      # print 'ArchetypePositionCstDict: ', ArchetypePositionCstDict
       
       for AtomName in ArchetypePositionCstDict:
-        print 'AtomName: ', AtomName
+        # print 'AtomName: ', AtomName
         for Constraint in ArchetypePositionCstDict[AtomName]:
           OtherName, OtherPosition, ConstraintParameters = Constraint
-          print 'OtherPosition', OtherPosition
+          # print 'OtherPosition', OtherPosition
           if OtherPosition > ArchetypePosition:
-            ArchetypePosition 
             for UnitShift in UnitShiftList:
-              CST = self.reassemble_atompair_cst(AtomName, (self.shift(ArchetypePosition) + UnitShift), OtherName, (self.shift(OtherPosition) + UnitShift), ConstraintParameters)
-              print CST
-              NewCsts.append(CST)
+              ShiftedArchetype = self.shift(ArchetypePosition) + UnitShift
+              ShiftedOther = self.shift(OtherPosition) + UnitShift
+              
+              if self.in_range(ShiftedArchetype) and self.in_range(ShiftedOther):
+                
+                # perhaps instead of removing these constraints, the residue should be changed. This would require cst and pose extrapolation to be intergrated
+                if NewPose.residue(ShiftedArchetype).has(AtomName) and NewPose.residue(ShiftedOther).has(OtherName):
+                  CST = self.reassemble_atompair_cst(AtomName, ShiftedArchetype, OtherName, ShiftedOther, ConstraintParameters)
+                  # print CST
+                  NewCsts.append(CST)
     
     # print ' debug exit '
     # sys.exit()         
@@ -291,7 +297,8 @@ def main(argv=None):
   ArgParser = argparse.ArgumentParser(description=' generate_backbones.py ( -help ) %s'%InfoString)
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=str, nargs='+', help=' Input pdbs ', required=True)
-  ArgParser.add_argument('-start', type=str, help=' Repeat start residue ', default=False)
+  # ArgParser.add_argument('-start', type=str, help=' Repeat start residue ', default=False)
+  
   # ArgParser.add_argument('-end', type=str, help=' input pdbs ', required=True)
   ArgParser.add_argument('-repeat', type=str, help=' Number of repeats to make ', default=5)
   ArgParser.add_argument('-max_turns_per_repeat', type=int, help=' Upper bound of number of turns per repeat unit to extrapolate repeat pose from. Lower bound always is 1 ', default=2)
@@ -306,13 +313,16 @@ def main(argv=None):
   if Args.csts:
     if len(Args.csts[0]) == 1:
       Args.csts = [''.join(Args.csts)]
-   
+
+  if Args.out [-1] != '/':
+    Args.out = Args.out + '/'
+
   # print 'Args.pdbs', Args.pdbs
   
   ### extrapolate from input cst to new extended backbones
 
   for i, Pdb in enumerate(Args.pdbs):
-    print 'Pdb', Pdb
+    print 'Pdb:', Pdb
     # load Pdb
     Pose = rosetta.pose_from_pdb(Pdb)
     Pose.pdb_info(rosetta.core.pose.PDBInfo( Pose ))
@@ -322,7 +332,7 @@ def main(argv=None):
     # get cst file if csts files
     if Args.csts:
       Cst = Args.csts[i]
-      print 'Cst', Cst
+      print 'Cst:', Cst
       Constrainer = constraint_extrapolator(Cst)
 
     # Get repeat unit poses from function above
@@ -334,11 +344,11 @@ def main(argv=None):
     UniformLength = Args.repeat * BaseRepeatUnitLength
     # MaxReach = InputPoseRepeatNumber * BaseRepeatUnitLength
     # print 'BaseRepeatUnitLength', BaseRepeatUnitLength
-    print 'UniformLength:', UniformLength
+    # print 'UniformLength:', UniformLength
 
     ExtrapolatedPoses = []
     for RepeatUnitCombo in itertools.combinations(ConsolidatedRepeatStarts, Args.max_turns_per_repeat):
-      print 'RepeatUnitCombo', RepeatUnitCombo
+      # print 'RepeatUnitCombo', RepeatUnitCombo
       RepeatUnit1Start, RepeatUnit2Start = RepeatUnitCombo
       assert RepeatUnit1Start <= RepeatUnit2Start, ' RepeatUnit1 must begin before RepeatUnit2 '
       if (RepeatUnit1Start + 4) <= RepeatUnit2Start <= (RepeatUnit1Start + BaseRepeatUnitLength - 4):  
@@ -362,8 +372,8 @@ def main(argv=None):
             Repeat1Unit = grafting.return_region(Pose, ShiftedUnit1Start, ShiftedUnit1End)
             Repeat2Unit = grafting.return_region(Pose, ShiftedUnit2Start, ShiftedUnit2End)
 
-            print 'ShiftedUnit1Start, ShiftedUnit1End: ', ShiftedUnit1Start, ShiftedUnit1End
-            print 'ShiftedUnit2Start, ShiftedUnit2End: ', ShiftedUnit2Start, ShiftedUnit2End
+            # print 'ShiftedUnit1Start, ShiftedUnit1End: ', ShiftedUnit1Start, ShiftedUnit1End
+            # print 'ShiftedUnit2Start, ShiftedUnit2End: ', ShiftedUnit2Start, ShiftedUnit2End
 
             # use function to extrapolate from a partial repeat 
             Extrapolation = extrapolate_repeat_pose(Repeat1Unit, Repeat2Unit, Args.repeat - 1)
@@ -371,18 +381,18 @@ def main(argv=None):
             Extrapolation = grafting.return_region(Extrapolation, 1, UniformLength)
 
             ExtrapolatedPoses.append(Extrapolation)
-            rosetta.dump_pdb( Extrapolation, '%s_extra_%d.pdb'%(InputPdbStem, len(ExtrapolatedPoses)) )
+            rosetta.dump_pdb( Extrapolation, '%s%s_extra_%d.pdb'%(Args.out, InputPdbStem, len(ExtrapolatedPoses)) )
 
             # if cst provided with pdb, extrapolate constraints to corrspond to new backbone
             if Args.csts:
               ExtrapolatedCsts = Constrainer.extrapolate_from_repeat_unit(ShiftedUnit1Start, ShiftedUnit2End, UnitLength, Extrapolation)
-              with open('%s_extra_%d.cst'%(InputPdbStem, len(ExtrapolatedPoses)), 'w') as CstFile:
+              with open('%s%s_extra_%d.cst'%(Args.out, InputPdbStem, len(ExtrapolatedPoses)), 'w') as CstFile:
                 print>>CstFile, '\n'.join(ExtrapolatedCsts) 
 
             # return 
    
-          print '\n'
-        print '\n'*3
+        #   print '\n'
+        # print '\n'*3
 
     print 'Number of extrapolated poses:', len(ExtrapolatedPoses)
 
@@ -424,5 +434,5 @@ def main(argv=None):
     #   RepeatPoses.append(RepeatSegmentPose)
     # return RepeatPoses
 
-# if __name__ == "__main__":
-#   sys.exit(main())
+if __name__ == "__main__":
+  sys.exit(main())
