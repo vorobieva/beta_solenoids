@@ -17,7 +17,7 @@ class alpha_carbon:
 
 class pose_wdag:
   """ Init method takes protein and spawns Calpha instances to populate """
-  def __init__( self, Pose, MinRepeats=2, DistanceTarget=4.7, DistanceFlex=0.5, AngleFlex=15.0 ):
+  def __init__( self, Pose, MinRepeats=3, DistanceTarget=4.7, DistanceFlex=0.5, AngleFlex=15.0 ):
     # Pose = Pose
     self.MinRepeats = MinRepeats
     self.DistanceTarget = DistanceTarget
@@ -28,14 +28,14 @@ class pose_wdag:
     self.CalphaInstances = []
     CalphaCoords = []
     for P in range( 1, Pose.n_residue() + 1):
-      print P
-      print Pose.residue(P)
-      print Pose.residue(P).xyz('CA')
+      # print P
+      # print Pose.residue(P)
+      # print Pose.residue(P).xyz('CA')
       CoordList = [Value for Value in Pose.residue(P).xyz('CA') ]
-      print CoordList
+      # print CoordList
       CoordList = list( Pose.residue(P).xyz('CA') )
-      print CoordList
-      print '\n*2'
+      # print CoordList
+      # print '\n*2'
       self.CalphaInstances.append( alpha_carbon(P, CoordList) )
       CalphaCoords.append( CoordList )
 
@@ -153,7 +153,7 @@ def consolidate_repeats(ListOfRepeatPositions):
       assert TandemIndenticalSpacings[MaxNumberStart][0] == TandemIndenticalSpacings[RepeatStart][0], ' different repeat spacings have same max copy number ' 
     # This is explicted (semi) silenced to prevent a large job from stopping at some later date
     except AssertionError:
-      print '\n\n\n LOOKOUT ERROR: multiple different repeat spacings have max copy number. \n\n\n'
+      print '\n ERROR: multiple different repeat spacings have max copy number.\n'
 
   MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
 
