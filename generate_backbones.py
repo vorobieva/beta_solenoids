@@ -220,8 +220,6 @@ class constraint_extrapolator:
         except KeyError:
           ConstraintDict[Res2] = {}
 
-<<<<<<< HEAD
-=======
         # add atom name entries for residue subdict as needed
         try:
           ConstraintDict[Res1][Name1].append( (Name2, Res2, ConstraintParameters) )
@@ -295,7 +293,6 @@ class constraint_extrapolator:
     # sys.exit()         
     return NewCsts
 
->>>>>>> ec58c4922f44f2cdc411ee97b13ead7c41696729
 def main(argv=None):
   if argv is None:
     argv = sys.argv
@@ -319,15 +316,12 @@ def main(argv=None):
   # print 'Args.pdbs', Args.pdbs
   if len(Args.pdbs) == 1:
     Args.pdbs = [''.join(Args.pdbs)]
-<<<<<<< HEAD
-=======
   if Args.csts:
     if len(Args.csts[0]) == 1:
       Args.csts = [''.join(Args.csts)]
 
   if Args.out [-1] != '/':
     Args.out = Args.out + '/'
->>>>>>> ec58c4922f44f2cdc411ee97b13ead7c41696729
 
   # print 'Args.pdbs', Args.pdbs
   
