@@ -259,7 +259,7 @@ def get_pose_oxy_nitro_constraints(Pose, MaxDist, MinPositionSeperation, SasaRad
         # print 'AverageSasa', AverageSasa
         # print 'SasaBasedWeight', SasaBasedWeight
         # adds atom pair constraint to list of constraints
-        DistanceCst = 'AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f SUMFUNC 2 HARMONIC %.2f 1.0 CONSTANTFUNC -0.5' %( OxyName, OxyRes, NitroName, NitroRes, SasaBasedWeight, Distance )
+        DistanceCst = 'AtomPair %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( OxyName, OxyRes, NitroName, NitroRes, SasaBasedWeight, Distance )
         Constraints.append(DistanceCst)
         
         if BBBB: BackboneBackboneCst.append(DistanceCst)
@@ -283,7 +283,7 @@ def main(argv=None):
   ArgParser = argparse.ArgumentParser(description=' nc_cst_gen.py arguments ( -help ) %s'%InfoString)
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=list, help=' input pdbs ', required=True)
-  ArgParser.add_argument('-out', type=str, help=' output directory ', required=True)
+  ArgParser.add_argument('-out', type=str, help=' output directory ', default='./')
   # Optional arguments:
   ArgParser.add_argument('-max_dist', type=float, default=3.4, help=' distance between the oxygens and nitrogens ')
   ArgParser.add_argument('-min_seq_sep', type=int, default=3, help=' minimum seperation in primary sequece ')
@@ -291,9 +291,9 @@ def main(argv=None):
   ArgParser.add_argument('-nitro', type=str, default='N\w?\d?', help=' grep for nitrogen atoms ')
   ArgParser.add_argument('-num_repeats', type=int, default=5, help=' number of repeats to extrapolate contacts for ')
   ArgParser.add_argument('-min_sasa',  type=float, default=0.0,  help=' floor for weighting nitrogen oxygen contacts ')
-  ArgParser.add_argument('-min_sasa_weight',  type=float, default=1.0,  help=' weight of floor for nitrogen oxygen contacts ')
+  ArgParser.add_argument('-min_sasa_weight',  type=float, default=10.0,  help=' weight of floor for nitrogen oxygen contacts ')
   ArgParser.add_argument('-max_sasa',  type=float, default=5.0,  help=' ceiling for cst weighting nitrogen oxygen contacts ')
-  ArgParser.add_argument('-max_sasa_weight',  type=float, default=0.1,  help=' weight of ceiling for nitrogen oxygen contacts ')
+  ArgParser.add_argument('-max_sasa_weight',  type=float, default=1.0,  help=' weight of ceiling for nitrogen oxygen contacts ')
   ArgParser.add_argument('-sasa_probe_radius', type=float, default=0.8,  help=' probe radius for sasa calculations ')
   ArgParser.add_argument('-renumber_pose', type=bool, default=True, help='True|False renumber pdb residues ' )
   Args = ArgParser.parse_args()
@@ -319,29 +319,30 @@ def main(argv=None):
 
     # Starting rosetta  
     Pose = rosetta.pose_from_pdb(Pdb)
+    OutputPdb = Args.out+Pdb
 
     # Sets pdb info so residues in dumped pdbs are same as index 
     Pose.pdb_info(rosetta.core.pose.PDBInfo( Pose ))
     if Args.renumber_pose:
-      rosetta.dump_pdb(Pose, Pdb)
+      rosetta.dump_pdb(Pose, OutputPdb)
     else:
-      rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_renumbered.pdb'))
+      rosetta.dump_pdb(Pose, OutputPdb.replace('.pdb', '_renumbered.pdb'))
 
     AllConstraints, SortedConstraints = get_pose_oxy_nitro_constraints(Pose, Args.max_dist, Args.min_seq_sep, Args.sasa_probe_radius, SasaScale, Args.oxy, Args.nitro)
     
-    CstName = Pdb.replace('.pdb', '_ON.cst')
+    CstName = OutputPdb.replace('.pdb', '_ON_All.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(AllConstraints) 
 
     BackboneBackboneCst, BackboneSidechainCst, SidechainSidechainCst = SortedConstraints
 
-    CstName = Pdb.replace('.pdb', '_ON_BBBB.cst')
+    CstName = OutputPdb.replace('.pdb', '_ON_BBBB.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(BackboneBackboneCst) 
-    CstName = Pdb.replace('.pdb', '_ON_BBSC.cst')
+    CstName = OutputPdb.replace('.pdb', '_ON_BBSC.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(BackboneSidechainCst) 
-    CstName = Pdb.replace('.pdb', '_ON_SCSC.cst')
+    CstName = OutputPdb.replace('.pdb', '_ON_SCSC.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(SidechainSidechainCst) 
 
