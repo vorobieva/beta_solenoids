@@ -315,7 +315,6 @@ class pose_wdag:
       self.CalphaDict[Instance.Number] = Instance
 
 
-
 def main(argv=None):
   if argv is None:
     argv = sys.argv
@@ -332,13 +331,6 @@ def main(argv=None):
   Args = ArgParser.parse_args()
   if len(Args.pdbs[0]) == 1:
     Args.pdbs = [''.join(Args.pdbs)]
-  
-  # return Args
-  # Super list to hold multithreaded design trajectories from all input pdbs
-  PdbJobs = []
-
-  # ScoreFunction = rosetta.create_score_function("standard")
-  # ScoreFunction.set_weight(rosetta.atom_pair_constraint, 5.0)
 
   for Pdb in Args.pdbs:
     # load Pdb
