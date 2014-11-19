@@ -38,12 +38,15 @@ def dump_many_poses(IterablePoses, Tag):
   for i, Pose in enumerate(IterablePoses):
     rosetta.dump_pdb( Pose, '%s_n%d.pdb'%(Tag, (1+i)) )
 
-def pose_repeat_unit_finder(Pose):
+def pose_repeat_unit_finder(Pose, RepeatChains=False):
   '''  '''
-  # Non-rosetta part, together these four lines finds primary sequence repeats to duplicate     
-  wDag = solenoid_tools.pose_wdag(Pose) # default settings are for beta solenoids !
-  wDag.find_downstream_neighbors()
-  RepeatChains = wDag.find_repeat_chains()
+  if RepeatChains == False:
+    # Non-rosetta part, together these four lines finds primary sequence repeats to duplicate     
+    wDag = solenoid_tools.pose_wdag(Pose) # default settings are for beta solenoids !
+    wDag.find_downstream_neighbors()
+    RepeatChains = wDag.find_repeat_chains()
+  print 'RepeatChains', RepeatChains
+    
   ConsolidatedRepeatStarts, TandemRepeats = solenoid_tools.consolidate_repeats(RepeatChains)
   return ConsolidatedRepeatStarts, TandemRepeats
 
@@ -114,7 +117,7 @@ def fuse(Pose1, Pose2, SubsetSize=2):
   # print 'EndOfPose1', EndOfPose1
   # print 'StartOfPose2', StartOfPose2
   FusionPose = grafting.return_region(Pose1, 1, EndOfPose1)
-  rosetta.dump_pdb(FusionPose, 'FusionPose1.pdb')
+  # rosetta.dump_pdb(FusionPose, 'FusionPose1.pdb')
   for Pose2Position in range( StartOfPose2, Pose2.n_residue()+1 ):
     Pose2Residue = Pose2.residue(Pose2Position)
     FusionPose.append_residue_by_bond(Pose2Residue)
@@ -142,7 +145,7 @@ def extrapolate_repeat_pose(Repeat1Pose, Repeat2Pose, Duplications):
   # Copy and store first subunit as base unit for subsequent transformations/fusions 
   FusionBasePose = rosetta.Pose()
   FusionBasePose.assign(FusionPose)
-  rosetta.dump_pdb(FusionBasePose, 'FusionBasePose.pdb')
+  # rosetta.dump_pdb(FusionBasePose, 'FusionBasePose.pdb')
 
   # Umatched region should be N terminal region of repeat pose 1 without matching pose 2 residues
   # Used repeated during loop below to superimpose on to end of growing fusion pose
@@ -297,11 +300,14 @@ def main(argv=None):
   ArgParser = argparse.ArgumentParser(description=' generate_backbones.py ( -help ) %s'%InfoString)
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=str, nargs='+', help=' Input pdbs ', required=True)
-  # ArgParser.add_argument('-start', type=str, help=' Repeat start residue ', default=False)
+  # ArgParser.add_argument('-start', type=int, help=' Repeat start residue ', default=False)
   
   # ArgParser.add_argument('-end', type=str, help=' input pdbs ', required=True)
-  ArgParser.add_argument('-repeat', type=str, help=' Number of repeats to make ', default=5)
+  ArgParser.add_argument('-repeat', type=int, help=' Number of repeats to make ', default=5)
   ArgParser.add_argument('-max_turns_per_repeat', type=int, help=' Upper bound of number of turns per repeat unit to extrapolate repeat pose from. Lower bound always is 1 ', default=2)
+  
+  ArgParser.add_argument('-man_repeat', type=str, help=' manual input of repeat chains (i.e. stripes of residues along pdb), _ seperates residues in chain, __ seperates chains ', default=False)
+
   # ArgParser.add_argument('-dat', type=str, help=' input symm dat file ', default=None)
   ArgParser.add_argument('-csts', type=str, nargs='+', help=' Input symm cst files (MUST be provided in same order as input PDBS)', default=None)
   ArgParser.add_argument('-out', type=str, help=' Output directory ', default='./')
@@ -336,8 +342,19 @@ def main(argv=None):
       Constrainer = constraint_extrapolator(Cst)
 
     # Get repeat unit poses from function above
-    ConsolidatedRepeatStarts, TandemRepeats = pose_repeat_unit_finder(Pose)
+    if Args.man_repeat == False:
+      ConsolidatedRepeatStarts, TandemRepeats = pose_repeat_unit_finder(Pose)
+    else:
+      RepeatChains = Args.man_repeat.split('__')
+      RepeatChains = [ [ int(Number) for Number in Chain.split('_') ] for Chain in RepeatChains]
+      # print 'RepeatChains', RepeatChains
+      # sys.exit()
+      ConsolidatedRepeatStarts, TandemRepeats = pose_repeat_unit_finder(Pose, RepeatChains)
     
+    ConsolidatedRepeatStarts.extend([45,46,47])
+    print 'ConsolidatedRepeatStarts', ConsolidatedRepeatStarts
+    print 'TandemRepeats', TandemRepeats
+
     InputPoseRepeatNumber = len(TandemRepeats[ConsolidatedRepeatStarts[0]])
     MaxTurns = min([InputPoseRepeatNumber, Args.max_turns_per_repeat])
     BaseRepeatUnitLength = TandemRepeats[ConsolidatedRepeatStarts[0]][0]
@@ -348,7 +365,7 @@ def main(argv=None):
 
     ExtrapolatedPoses = []
     for RepeatUnitCombo in itertools.combinations(ConsolidatedRepeatStarts, Args.max_turns_per_repeat):
-      # print 'RepeatUnitCombo', RepeatUnitCombo
+      print 'RepeatUnitCombo', RepeatUnitCombo
       RepeatUnit1Start, RepeatUnit2Start = RepeatUnitCombo
       assert RepeatUnit1Start <= RepeatUnit2Start, ' RepeatUnit1 must begin before RepeatUnit2 '
       if (RepeatUnit1Start + 4) <= RepeatUnit2Start <= (RepeatUnit1Start + BaseRepeatUnitLength - 4):  

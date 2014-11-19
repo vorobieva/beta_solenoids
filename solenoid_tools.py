@@ -138,6 +138,7 @@ def consolidate_repeats(ListOfRepeatPositions):
 
       LastSpacing = Spacing
   
+  print 'TandemIndenticalSpacings', TandemIndenticalSpacings
   MaxNumberStart = 0
   EqualLengthStarts = []
 
