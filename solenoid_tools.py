@@ -111,6 +111,102 @@ class pose_wdag:
       # add residue alpha carbon instance to dictionary
       self.CalphaDict[Instance.Number] = Instance
 
+def better_consolidate_repeats(ListOfRepeatPositions):
+  
+  TandemIndenticalSpacings = {0:[]}
+  
+  for RepeatPositions in ListOfRepeatPositions:
+    RepeatPositions = RepeatPositions[:]
+    RepeatSpacings = [ RepeatPositions[i+1] - RepeatPositions[i] for i in range(len(RepeatPositions)-1) ]
+
+    # appending buffer value for added last repeat chain to TandemIndenticalSpacings
+    RepeatSpacings.append(0)
+    RepeatPositions.append(0)
+
+    LastSpacing = 0
+    RepeatChain = [RepeatSpacings[0]]
+    Start = RepeatPositions[0]
+    
+    for i, Spacing in enumerate(RepeatSpacings):
+      if Spacing == LastSpacing:
+        RepeatChain.append(Spacing)
+      else:
+        TandemIndenticalSpacings[Start] = RepeatChain
+        Start = RepeatPositions[i]
+        RepeatChain = [RepeatSpacings[i]]
+
+      LastSpacing = Spacing
+  
+  # print 'TandemIndenticalSpacings', TandemIndenticalSpacings
+  # MaxNumberStart = 0
+  # EqualLengthStarts = []
+  SortedTandemRepeatKeys = [ Key for Key in TandemIndenticalSpacings ]
+  SortedTandemRepeatKeys.sort()
+
+  RepeatLengthFreqHash = {}
+
+  for Position in TandemIndenticalSpacings:
+    if Position:
+      try: RepeatLengthFreqHash[ TandemIndenticalSpacings[Position][0] ] += 1
+      except: RepeatLengthFreqHash[ TandemIndenticalSpacings[Position][0] ] = 1
+
+  print 'RepeatLengthFreqHash', RepeatLengthFreqHash
+  RepeatStretchesByLengthHash = {}
+
+  # iterate through lengths in length frequency hash
+  for TargetLength in RepeatLengthFreqHash:
+    # print 'TargetLength', TargetLength
+    RepeatStretches = []
+    Stretch = []
+    LastPosition = -1000
+    # iterate through repeat starts in 
+    for Position in SortedTandemRepeatKeys:  
+      if Position:
+        PositionRepeatLength = TandemIndenticalSpacings[Position][0]
+        if PositionRepeatLength == TargetLength:
+          if Position < LastPosition + TargetLength:
+            # print 'if'
+            Stretch = Stretch[:-1]
+            Stretch.extend([LastPosition, Position])
+          else:
+            if len(Stretch) > 1:
+              RepeatStretches.append(Stretch)
+              Stretch = []
+            # print 'else'
+            Stretch = [Position]
+          # print 'Stretch', Stretch
+          LastPosition = Position
+    
+    if len(Stretch) > 1:
+      RepeatStretches.append(Stretch)
+      Stretch = []
+    # except NameError:
+    #   print ' Strech doesnt exist yet '
+    #   pass
+
+    # print 'TargetLength', TargetLength
+    # print 'RepeatStretches', RepeatStretches
+    RepeatStretchesByLengthHash[TargetLength] = RepeatStretches
+
+  return RepeatStretchesByLengthHash, TandemIndenticalSpacings
+  # for Start in TandemIndenticalSpacings:
+  #   if len(TandemIndenticalSpacings[Start]) > len(TandemIndenticalSpacings[MaxNumberStart]):
+  #     MaxNumberStart = Start
+  #     EqualLengthStarts = []
+  #   elif len(TandemIndenticalSpacings[Start]) == len(TandemIndenticalSpacings[MaxNumberStart]):
+  #     EqualLengthStarts.append(Start)
+
+  # for RepeatStart in EqualLengthStarts:
+  #   try:
+  #     assert TandemIndenticalSpacings[MaxNumberStart][0] == TandemIndenticalSpacings[RepeatStart][0], ' different repeat spacings have same max copy number ' 
+  #   # This is explicted (semi) silenced to prevent a large job from stopping at some later date
+  #   except AssertionError:
+  #     print '\n ERROR: multiple different repeat spacings have max copy number.\n'
+
+  # MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
+
+  # return MaxNumberRepeatStarts, TandemIndenticalSpacings
+
 
 def consolidate_repeats(ListOfRepeatPositions):
   

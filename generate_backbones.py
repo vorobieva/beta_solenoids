@@ -5,7 +5,7 @@ TO GENERATE BACKBONES AROUND STARTING STRUCTURE
 BY STRECHING REPEAT REGION DESIGNATED BY NUMBER
 '''
 
-# '''
+#'''
 # from repo 
 import solenoid_tools
 
@@ -28,27 +28,13 @@ from rosetta.protocols import grafting
 from rosetta.core.pose import initialize_atomid_map
 # from rosetta.core.id import AtomID, AtomID_Map_Real, AtomID_Map_bool
 
-# pymol_link = rosetta.PyMolMover()
-
 # ''' 
-# sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 
 
 def dump_many_poses(IterablePoses, Tag):
   for i, Pose in enumerate(IterablePoses):
     rosetta.dump_pdb( Pose, '%s_n%d.pdb'%(Tag, (1+i)) )
 
-def pose_repeat_unit_finder(Pose, RepeatChains=False):
-  '''  '''
-  if RepeatChains == False:
-    # Non-rosetta part, together these four lines finds primary sequence repeats to duplicate     
-    wDag = solenoid_tools.pose_wdag(Pose) # default settings are for beta solenoids !
-    wDag.find_downstream_neighbors()
-    RepeatChains = wDag.find_repeat_chains()
-  print 'RepeatChains', RepeatChains
-    
-  ConsolidatedRepeatStarts, TandemRepeats = solenoid_tools.consolidate_repeats(RepeatChains)
-  return ConsolidatedRepeatStarts, TandemRepeats
 
 def fuse(Pose1, Pose2, SubsetSize=2):
   # Should continue to fiddle with the hardcoded var below,
@@ -67,7 +53,9 @@ def fuse(Pose1, Pose2, SubsetSize=2):
   except AssertionError:
     dump_many_poses([Pose1, Pose2], 'FusedFusion')
     # print 'MatchingResidueHash:', MatchingResidueHash
+    # print ' Designated subset length should not exceed that of the overlap between poses. Poses dumped for inspection '
     assert SubsetSize <= NofMatchRes, ' Designated subset length should not exceed that of the overlap between poses. Poses dumped for inspection '
+  
   # contains positions like [ (MatchRes1InPose1, MatchRes1InPose2), (MatchRes2InPose1, MatchRes2InPose2) .. ]
   CorrespondingResidues = []
 
@@ -139,9 +127,10 @@ def extrapolate_repeat_pose(Repeat1Pose, Repeat2Pose, Duplications):
   RepeatLength = Repeat1Pose.n_residue()
   Residues = [P for P in range(1, RepeatLength+1)]
  
+
   # First fusion is easy since the input poses contain duplicate residues
   FusionPose, RMSD, CorrespondingResidues = fuse(Repeat1Pose, Repeat2Pose)
-  
+  # 
   # Copy and store first subunit as base unit for subsequent transformations/fusions 
   FusionBasePose = rosetta.Pose()
   FusionBasePose.assign(FusionPose)
@@ -293,6 +282,29 @@ class constraint_extrapolator:
     # sys.exit()         
     return NewCsts
 
+def pose_repeat_unit_finder(Pose, RepeatChains=False):
+  '''  '''
+  if RepeatChains == False:
+    # Non-rosetta part, together these four lines finds primary sequence repeats to duplicate     
+    wDag = solenoid_tools.pose_wdag(Pose) # default settings are for beta solenoids !
+    wDag.find_downstream_neighbors()
+    RepeatChains = wDag.find_repeat_chains()
+  # print 'RepeatChains', RepeatChains
+  
+  # ConsolidatedRepeatStarts, TandemRepeats = solenoid_tools.consolidate_repeats(RepeatChains)
+  # print 'ConsolidatedRepeatStarts, TandemRepeats'
+  # print ConsolidatedRepeatStarts, TandemRepeats
+
+  RepeatStretchesByLengthHash, TandemIndenticalSpacings = solenoid_tools.better_consolidate_repeats(RepeatChains)
+  # print 'RepeatStretchesByLengthHash, TandemIndenticalSpacings'
+  # print RepeatStretchesByLengthHash, TandemIndenticalSpacings
+  
+  return TandemIndenticalSpacings, RepeatStretchesByLengthHash
+  # sys.exit()
+  # return ConsolidatedRepeatStarts, TandemRepeats, RepeatStretchesByLengthHash
+
+# sys.argv = [sys.argv[0], '-pdbs', '3ult.pdb', '-csts', '3ult_ON_All.cst', '-repeat', '6', '-max_turns_per_repeat', '3']
+
 def main(argv=None):
   if argv is None:
     argv = sys.argv
@@ -300,16 +312,17 @@ def main(argv=None):
   ArgParser = argparse.ArgumentParser(description=' generate_backbones.py ( -help ) %s'%InfoString)
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=str, nargs='+', help=' Input pdbs ', required=True)
-  # ArgParser.add_argument('-start', type=int, help=' Repeat start residue ', default=False)
-  
-  # ArgParser.add_argument('-end', type=str, help=' input pdbs ', required=True)
-  ArgParser.add_argument('-repeat', type=int, help=' Number of repeats to make ', default=5)
+  ArgParser.add_argument('-csts', type=str, nargs='+', help=' Input cst files (MUST be provided in same order as input PDBS)', default=None)
+
+  ArgParser.add_argument('-repeat', type=int, help=' Number of repeats to make ', default = 5)
   ArgParser.add_argument('-max_turns_per_repeat', type=int, help=' Upper bound of number of turns per repeat unit to extrapolate repeat pose from. Lower bound always is 1 ', default=2)
+
+  ArgParser.add_argument('-min_overlap', type=int, help=' minimum residue overlap between superimposed regions ', default=4)
   
   ArgParser.add_argument('-man_repeat', type=str, help=' manual input of repeat chains (i.e. stripes of residues along pdb), _ seperates residues in chain, __ seperates chains ', default=False)
+  # ArgParser.add_argument('-start', type=int, help=' Repeat start residue ', default=False)  
+  # ArgParser.add_argument('-end', type=str, help=' input pdbs ', required=True)
 
-  # ArgParser.add_argument('-dat', type=str, help=' input symm dat file ', default=None)
-  ArgParser.add_argument('-csts', type=str, nargs='+', help=' Input symm cst files (MUST be provided in same order as input PDBS)', default=None)
   ArgParser.add_argument('-out', type=str, help=' Output directory ', default='./')
 
   Args = ArgParser.parse_args()
@@ -343,113 +356,133 @@ def main(argv=None):
 
     # Get repeat unit poses from function above
     if Args.man_repeat == False:
-      ConsolidatedRepeatStarts, TandemRepeats = pose_repeat_unit_finder(Pose)
+      TandemRepeats, RepeatStretchesByLengthHash = pose_repeat_unit_finder(Pose)
+    
     else:
       RepeatChains = Args.man_repeat.split('__')
       RepeatChains = [ [ int(Number) for Number in Chain.split('_') ] for Chain in RepeatChains]
       # print 'RepeatChains', RepeatChains
       # sys.exit()
-      ConsolidatedRepeatStarts, TandemRepeats = pose_repeat_unit_finder(Pose, RepeatChains)
-    
-    ConsolidatedRepeatStarts.extend([45,46,47])
-    print 'ConsolidatedRepeatStarts', ConsolidatedRepeatStarts
-    print 'TandemRepeats', TandemRepeats
-
-    InputPoseRepeatNumber = len(TandemRepeats[ConsolidatedRepeatStarts[0]])
-    MaxTurns = min([InputPoseRepeatNumber, Args.max_turns_per_repeat])
-    BaseRepeatUnitLength = TandemRepeats[ConsolidatedRepeatStarts[0]][0]
-    UniformLength = Args.repeat * BaseRepeatUnitLength
-    # MaxReach = InputPoseRepeatNumber * BaseRepeatUnitLength
-    # print 'BaseRepeatUnitLength', BaseRepeatUnitLength
-    # print 'UniformLength:', UniformLength
-
-    ExtrapolatedPoses = []
-    for RepeatUnitCombo in itertools.combinations(ConsolidatedRepeatStarts, Args.max_turns_per_repeat):
-      print 'RepeatUnitCombo', RepeatUnitCombo
-      RepeatUnit1Start, RepeatUnit2Start = RepeatUnitCombo
-      assert RepeatUnit1Start <= RepeatUnit2Start, ' RepeatUnit1 must begin before RepeatUnit2 '
-      if (RepeatUnit1Start + 4) <= RepeatUnit2Start <= (RepeatUnit1Start + BaseRepeatUnitLength - 4):  
-        for TurnsPerRepeat in range(1, MaxTurns+1):
-          UnitLength = (BaseRepeatUnitLength * TurnsPerRepeat)
-          UnitShift = UnitLength - 1
-          AvailableShifts = InputPoseRepeatNumber - TurnsPerRepeat
-          # print 'TurnsPerRepeat', TurnsPerRepeat
-          # print 'UnitLength', UnitLength
-          # print 'AvailableShifts', AvailableShifts
-          # print 'MaxReach', MaxReach
-          # print 'MaxReach1 %d %d'%(RepeatUnit1Start, RepeatUnit1Start+MaxReach)
-          # print 'MaxReach2 %d %d'%(RepeatUnit2Start, RepeatUnit2Start+MaxReach)
-          
-          for Shift in range(AvailableShifts+1):
-            ShiftedUnit1Start = RepeatUnit1Start + Shift
-            ShiftedUnit1End = ShiftedUnit1Start + UnitShift
-            ShiftedUnit2Start = RepeatUnit2Start + Shift
-            ShiftedUnit2End = ShiftedUnit2Start + UnitShift
- 
-            Repeat1Unit = grafting.return_region(Pose, ShiftedUnit1Start, ShiftedUnit1End)
-            Repeat2Unit = grafting.return_region(Pose, ShiftedUnit2Start, ShiftedUnit2End)
-
-            # print 'ShiftedUnit1Start, ShiftedUnit1End: ', ShiftedUnit1Start, ShiftedUnit1End
-            # print 'ShiftedUnit2Start, ShiftedUnit2End: ', ShiftedUnit2Start, ShiftedUnit2End
-
-            # use function to extrapolate from a partial repeat 
-            Extrapolation = extrapolate_repeat_pose(Repeat1Unit, Repeat2Unit, Args.repeat - 1)
-            # trim down to uniform length 
-            Extrapolation = grafting.return_region(Extrapolation, 1, UniformLength)
-
-            ExtrapolatedPoses.append(Extrapolation)
-            rosetta.dump_pdb( Extrapolation, '%s%s_extra_%d.pdb'%(Args.out, InputPdbStem, len(ExtrapolatedPoses)) )
-
-            # if cst provided with pdb, extrapolate constraints to corrspond to new backbone
-            if Args.csts:
-              ExtrapolatedCsts = Constrainer.extrapolate_from_repeat_unit(ShiftedUnit1Start, ShiftedUnit2End, UnitLength, Extrapolation)
-              with open('%s%s_extra_%d.cst'%(Args.out, InputPdbStem, len(ExtrapolatedPoses)), 'w') as CstFile:
-                print>>CstFile, '\n'.join(ExtrapolatedCsts) 
-
-            # return 
-   
-        #   print '\n'
-        # print '\n'*3
-
-    print 'Number of extrapolated poses:', len(ExtrapolatedPoses)
-
-    # for Repeat1Start in ConsolidatedRepeatStarts:
-    #   # for Repeat1Start in ConsolidatedRepeatStarts:
-
-    #   EndShift = TandemRepeats[RepeatStart][0] - 1    
-    #   RepeatEnd = RepeatStart + EndShift
-
-    #   RepeatPoses.append(RepeatUnit)
-    
-    # return RepeatPoses
-    
-    # for RepeatUnit in RepeatUnitPoses:
-    #   for Res in range(1, RepeatUnit.n_residue()+1):
-    #     if RepeatUnit.residue(Res).name() == 'CYD':
-    #       rosetta.core.conformation.change_cys_state(Res, 'CYS', RepeatUnit.conformation())
-
-    # # RepeatPoses.append(RepeatUnitPoses)
-    # return RepeatUnitPoses
-    
-    # extrapolate_repeat_pose(Repeat1Pose, Repeat2Pose, Duplications)
-
-    # # Non-rosetta part, together these four lines finds primary sequence repeats to duplicate     
-    # wDag = pose_wdag(Pose) # default settings are for beta solenoids !
-    # wDag.find_downstream_neighbors()
-    # RepeatChains = wDag.find_repeat_chains()
-    # ConsolidatedRepeatStarts, TandemRepeats = solenoid_tools.consolidate_repeats(RepeatChains)
-
-    # RepeatPoses = []
-    # for RepeatStart in ConsolidatedRepeatStarts:
-    # # for RepeatSegmentPose in RepeatSegments:
-    #   RepeatSegmentPose = pose_repeat_unit_generator(Pose, RepeatStart, TandemRepeats[RepeatStart])
+      TandemRepeats, RepeatStretchesByLengthHash = pose_repeat_unit_finder(Pose, RepeatChains)
       
-    #   for Res in range(1, RepeatSegmentPose.n_residue()+1):
-    #     if RepeatSegmentPose.residue(Res).name() == 'CYD':
-    #       rosetta.core.conformation.change_cys_state(Res, 'CYS', RepeatSegmentPose.conformation())
+    # RepeatStretchesByLengthHash[12] = [[14, 15, 16, 17, 18, 21]]
+    # ConsolidatedRepeatStarts.extend([45,46,47])    
+    # print 'ConsolidatedRepeatStarts', ConsolidatedRepeatStarts
+    # print 'RepeatStretchesByLengthHash', RepeatStretchesByLengthHash
+    # print 'TandemRepeats', TandemRepeats
 
-    #   RepeatPoses.append(RepeatSegmentPose)
-    # return RepeatPoses
+    # InputPoseRepeatNumber = len(TandemRepeats[ConsolidatedRepeatStarts[0]])
+
+    AllExtrapolationsByRepeatLength = {}
+    print 'TandemRepeats:', TandemRepeats
+    print 'RepeatStretchesByLengthHash:', RepeatStretchesByLengthHash
+    # print 
+    # MaxTurns = Args.max_turns_per_repeat   
+    count = 1
+    for RepeatUnitLength in RepeatStretchesByLengthHash:
+      # UniformLength = Args.repeat * RepeatUnitLength
+      
+      ExtrapolationList = []
+      MinLength = 9000000000 # will break if pose has more than 9 billion residues
+      
+      print 'RepeatUnitLength', RepeatUnitLength
+      for RepeatStretch in RepeatStretchesByLengthHash[RepeatUnitLength]:
+        print 'RepeatStretch', RepeatStretch
+
+        # gets all pairwise combinations of repeat combinations, second arg should ALWAYS be 2, unless manger overhaul is performed
+        for RepeatUnitCombo in itertools.combinations(RepeatStretch, 2):
+          # print 'RepeatUnitCombo', RepeatUnitCombo
+          RepeatUnit1Start, RepeatUnit2Start = RepeatUnitCombo
+          assert RepeatUnit1Start <= RepeatUnit2Start, ' RepeatUnit1 must begin before RepeatUnit2 '
+
+          TandemRepeats1 = TandemRepeats[RepeatUnit1Start]
+          TandemRepeats2 = TandemRepeats[RepeatUnit2Start]
+
+          # Whichever position starts the fewest tandem repeats dicates how far to shift
+          Shifts = min(len(TandemRepeats1), len(TandemRepeats2))
+          # How max number of turns to include per repeat depends on available repeats, and uner input max 
+          MaxTurns = min( Args.max_turns_per_repeat, Shifts)
+
+          if (RepeatUnit1Start + Args.min_overlap) <= RepeatUnit2Start <= (RepeatUnit1Start + RepeatUnitLength - Args.min_overlap):  
+            # print 
+            # print 'Selected RepeatUnitCombo:', RepeatUnitCombo
+            # print 'RepeatUnit1Start, repeats ', RepeatUnit1Start, TandemRepeats[RepeatUnit1Start]
+            # print 'RepeatUnit2Start, repeats ', RepeatUnit2Start, TandemRepeats[RepeatUnit2Start]
+                          
+            for NumTurns in range(1, MaxTurns+1):
+              
+              # print '\n'*5
+              # print 'NumTurns', NumTurns
+              ModLength = NumTurns * RepeatUnitLength
+              
+              # print 'ModLength', ModLength
+              ModUniformLength = Args.repeat * ModLength
+              # print 'ModUniformLength1', ModUniformLength
+            
+              for Shift in range((Shifts/NumTurns)):
+                # print 'Shift', Shift
+                ModRep1Start = RepeatUnit1Start + (Shift*ModLength)
+                ModRep2Start = RepeatUnit2Start + (Shift*ModLength)
+                Overlap = ModRep2Start - ModRep1Start
+                ModRep1End = ModRep1Start + ModLength - 1 
+                ModRep2End = ModRep2Start + ModLength - 1 
+
+                # print 'ModRep1Start, ModRep1End', ModRep1Start, ModRep1End
+                # print 'ModRep2Start, ModRep2End', ModRep2Start, ModRep2End
+
+                Repeat1Unit = grafting.return_region(Pose, ModRep1Start, ModRep1End)
+                Repeat2Unit = grafting.return_region(Pose, ModRep2Start, ModRep2End)
+                # print 'Repeat1Unit', Repeat1Unit
+                # print 'Repeat2Unit', Repeat2Unit
+                # use function to extrapolate from a partial repeat 
+
+                try:
+                  Extrapolation = extrapolate_repeat_pose(Repeat1Unit, Repeat2Unit, Args.repeat - 1)
+                except AssertionError:
+                  'Extrapolation failed'
+                  continue
+
+                # hacky check finds things that went wrong in extrapolation, sometimes
+                if Extrapolation.n_residue() == ModUniformLength + Overlap:
+                  # print 'pass'
+                  # print 'ModUniformLength2', ModUniformLength
+                  # print 'Extrapolation', Extrapolation
+                  
+                  # trim down to uniform length 
+                  Extrapolation = grafting.return_region(Extrapolation, 1, ModUniformLength)
+                  # Extrapolation = grafting.return_region(Extrapolation, 1, UniformLength)
+
+                  # if cst provided with pdb, extrapolate constraints to corrspond to new backbone
+                  if Args.csts:
+                    ExtrapolatedCst = '\n'.join(Constrainer.extrapolate_from_repeat_unit(ModRep1Start, ModRep2End, ModLength, Extrapolation))
+
+                  # add extrapolated pose to list
+                  Repeat1Range = (ModRep1Start, ModRep1End)
+                  Repeat2Range = (ModRep2Start, ModRep2End)
+                  ExtrapolationList.append(( Extrapolation, ExtrapolatedCst, Repeat1Range, Repeat2Range, NumTurns ))
+
+                else:
+                  print 'fail'
+
+
+      AllExtrapolationsByRepeatLength[RepeatUnitLength] = ExtrapolationList
+
+    # return (AllExtrapolationsByRepeatLength, Args)
+
+    with open('%s_RepExtra.log'%InputPdbStem, 'w') as LogFile:
+      for BaseUnitLength in AllExtrapolationsByRepeatLength:
+        print 'Extrapolated %d poses with base unit length %d'%(len(AllExtrapolationsByRepeatLength[BaseUnitLength]), BaseUnitLength)
+        print>>LogFile, 'Extrapolated %d poses with base unit length %d'%(len(AllExtrapolationsByRepeatLength[BaseUnitLength]), BaseUnitLength)
+        print>>LogFile, 'Number\tUnit1 range\tUnit2 range'
+        for i, ExtrapolationTuple in enumerate( AllExtrapolationsByRepeatLength[BaseUnitLength] ):
+          # print Extrapolation
+          print>>LogFile, '\t\t'.join([ str(i+1), ','.join([str(Number) for Number in ExtrapolationTuple[2]]), ','.join([str(Number) for Number in ExtrapolationTuple[3]]) ])
+          RepeatUnitLength = BaseUnitLength * ExtrapolationTuple[4]
+          rosetta.dump_pdb( ExtrapolationTuple[0], '%s%s_rep%dextra%d.pdb'%(Args.out, InputPdbStem, RepeatUnitLength, i+1) )
+          with open( '%s%s_rep%dextra%d.cst'%(Args.out, InputPdbStem, RepeatUnitLength, i+1), 'w' ) as CstFile:
+            print>>CstFile, ExtrapolationTuple[1]
+
+# getBluePrintFromCoords.pl -pdbfile 3ult_rep15extra50.pdb > 3ult_rep15extra50.bp
 
 if __name__ == "__main__":
   sys.exit(main())
