@@ -1,5 +1,21 @@
 #! /usr/bin/env python
 
+# 8/14/14
+# Baker Lab UW
+
+# From Will's header from pymol_util
+#####################################
+import sys,os,inspect
+newpath = os.path.dirname(inspect.getfile(inspect.currentframe())) # script directory
+if not newpath in sys.path:
+  sys.path.append(newpath)
+# end of elements from Will's header 
+
+# print 'newpath','/'.join(newpath.split('/')[:-1])
+
+PATH_TO_REPO = '/'.join(newpath.split('/')[:-1])
+sys.path.append(PATH_TO_REPO)
+
 import argparse
 import sys
 
