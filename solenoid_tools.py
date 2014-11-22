@@ -256,19 +256,34 @@ def consolidate_repeats(ListOfRepeatPositions):
 
   return MaxNumberRepeatStarts, TandemIndenticalSpacings
 
-
-def vector_magnitude(Vector):
-   ''' ND pythagorean theorem '''
-   return ( np.sum( [ Component**2 for Component in Vector ] ) )**0.5
-
 def derosettafy(RosettaVector):
   print ''' STOP USING derosettafy USE LIST '''
   assert 0 ,''' STOP USING derosettafy USE LIST '''
   List = [float(Value) for Value in RosettaVector]
   return np.array(List)
 
+def vector_magnitude(Vector):
+   ''' ND pythagorean theorem '''
+   return ( np.sum( [ Component**2 for Component in Vector ] ) )**0.5
+
 def angle(Vector1, Vector2):
   return np.arccos( np.dot(Vector1, Vector2) / ( vector_magnitude(Vector1) * vector_magnitude(Vector2) ) )
+
+def three_atom_angle(Atom1Coords, Atom2Coords, Atom3Coords):
+  Vector1 = Atom2Coords - Atom1Coords
+  Vector2 = Atom3Coords - Atom2Coords
+  return angle(Vector1, Vector2)
+
+def dihedral(Vector1, Vector2, Vector3):
+  VectorA = np.cross(Vector1, Vector2)
+  VectorB = np.cross(Vector2, Vector3)
+  return angle(VectorA, VectorB)
+
+def four_atom_dihedral(Atom1Coords, Atom2Coords, Atom3Coords, Atom4Coords):
+  Vector1 = Atom2Coords - Atom1Coords
+  Vector2 = Atom3Coords - Atom2Coords
+  Vector3 = Atom4Coords - Atom3Coords
+  return dihedral(Vector1, Vector2, Vector3)
 
 def rmsd_2_np_arrays(crds1, crds2):
   """Returns RMSD between 2 sets of [nx3] numpy array

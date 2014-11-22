@@ -10,7 +10,7 @@ This script is to generate ATOMPAIR constraints for Rosetta,
 '''
 
 # uncomment just next line and copy block in multiline string for ipython mode
-'''
+# '''
 
 import solenoid_tools
 
@@ -247,10 +247,10 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                 SelectUpNeighbors.sort()                
                 UpNeighbor1Tuple = SelectUpNeighbors[0]
                 UpNeighbor2Tuple = SelectUpNeighbors[1]
-                print '\n'*2
-                print 'UpRes, UpName', UpRes, UpName
-                print 'UpstreamHydrogens', UpstreamHydrogens
-                print 'SelectUpNeighbors', SelectUpNeighbors
+                # print '\n'*2
+                # print 'UpRes, UpName', UpRes, UpName
+                # print 'UpstreamHydrogens', UpstreamHydrogens
+                # print 'SelectUpNeighbors', SelectUpNeighbors
 
                  # get neighbors of upstream residues
                 NeighborsOfDownstream = ResidueAtomNeighbors[DownIndex]
@@ -279,9 +279,9 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                 SelectDownNeighbors.sort()
                 DownNeighbor1Tuple = SelectDownNeighbors[0]
                 DownNeighbor2Tuple = SelectDownNeighbors[1]
-                print 'DownRes, DownName', DownRes, DownName
-                print 'DownstreamHydrogens', DownstreamHydrogens
-                print 'SelectDownNeighbors', SelectDownNeighbors
+                # print 'DownRes, DownName', DownRes, DownName
+                # print 'DownstreamHydrogens', DownstreamHydrogens
+                # print 'SelectDownNeighbors', SelectDownNeighbors
 
                 Distance = solenoid_tools.vector_magnitude(DownXyzCoords - UpXyzCoords)
                 
@@ -298,16 +298,16 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                 DownNeighbor2Vec = PDB.Vector(DownNeighbor2Tuple[3])
 
                 Angle1 = np.degrees( PDB.calc_angle(UpNeighbor1Vec, UpstreamVec, DownstreamVec) )
-                AngleCst1 = 'Angle %s %f %s %f %s %f SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Angle1 )
+                AngleCst1 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Angle1 )
                 Angle2 = np.degrees( PDB.calc_angle(UpstreamVec, DownstreamVec, DownNeighbor1Vec) )
-                AngleCst2 = 'Angle %s %f %s %f %s %f SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Angle2 )
+                AngleCst2 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Angle2 )
 
                 Torsion1 = np.degrees( PDB.calc_dihedral(UpNeighbor2Vec, UpNeighbor1Vec, UpstreamVec, DownstreamVec) )
-                TorsionCst1 = 'Dihedral %s %f %s %f %s %f %s %f SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor2Tuple[1], UpNeighbor2Tuple[2], UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Torsion1 )
+                TorsionCst1 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor2Tuple[1], UpNeighbor2Tuple[2], UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Torsion1 )
                 Torsion2 = np.degrees( PDB.calc_dihedral(UpNeighbor1Vec, UpstreamVec, DownstreamVec, DownNeighbor1Vec) )
-                TorsionCst2 = 'Dihedral %s %f %s %f %s %f %s %f SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Torsion2 )
+                TorsionCst2 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Torsion2 )
                 Torsion3 = np.degrees( PDB.calc_dihedral(UpstreamVec, DownstreamVec, DownNeighbor1Vec, DownNeighbor2Vec) )
-                TorsionCst3 = 'Dihedral %s %f %s %f %s %f %s %f SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], DownNeighbor2Tuple[1], DownNeighbor2Tuple[2], SasaBasedWeight, Torsion3 )
+                TorsionCst3 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], DownNeighbor2Tuple[1], DownNeighbor2Tuple[2], SasaBasedWeight, Torsion3 )
 
                 # adds constraint to running lists of constraints
                 Constraints.extend( [DistanceCst, AngleCst1, AngleCst2, TorsionCst1, TorsionCst2, TorsionCst3] )
@@ -397,8 +397,9 @@ def main(argv=None):
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(SidechainSidechainCst) 
 
-# if __name__ == "__main__":
-#   sys.exit(main())
+
+if __name__ == "__main__":
+  sys.exit(main())
 
 
 

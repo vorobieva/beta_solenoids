@@ -3,6 +3,13 @@ InfoString = '''
 TO GENERATE BACKBONES AROUND STARTING STRUCTURE 
     WHICH MAY BE MODIFIED 
 BY STRECHING REPEAT REGION DESIGNATED BY NUMBER
+
+For constraints, ORDER IS CRITICAL!!!
+
+All interactions must lead with an AtomPair cst
+and all other constraints are assumed to be 
+associate with the residues in the previoues
+AtomPair constraint.
 '''
 
 #'''
@@ -24,9 +31,6 @@ import rosetta
 # rosetta.init()
 rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
 from rosetta.protocols import grafting 
-
-from rosetta.core.pose import initialize_atomid_map
-# from rosetta.core.id import AtomID, AtomID_Map_Real, AtomID_Map_bool
 
 # ''' 
 
@@ -190,8 +194,16 @@ class constraint_extrapolator:
   def parse_cst(self, CstFilename):
     with open(CstFilename, 'r') as CstFile:
       CstLines = CstFile.readlines()
+    
+    # sane
     ConstraintDict = {}
+    # insane but easy
+    AngleCstDict = {}
+    DihedralCstDict = {}
+
     for Line in CstLines:
+      
+      # Assumes that all constraints inbetween atom pair constraints are associated with previous atom pair
       if Line.startswith('AtomPair'):
         CstType, Name1, Res1, Name2, Res2 = tuple( Line.split()[:5] )
         ConstraintParameters = Line.split()[5:]
@@ -218,7 +230,17 @@ class constraint_extrapolator:
           ConstraintDict[Res2][Name2].append( (Name1, Res1, ConstraintParameters) )
         except KeyError:
           ConstraintDict[Res2][Name2] = [ (Name1, Res1, ConstraintParameters) ]
-    
+      
+
+      # potentially dangerous assumptions, :|
+      # elif Line.startswith('Angle'):
+      #   CstType, AngleCstName1, AngleCstRes1, AngleCstName2, AngleCstRes2, AngleCstName3, AngleCstRes3 = tuple( Line.split()[:7] )
+
+      #   ConstraintDict[Res1][Name1].append( )
+
+      # elif Line.startswith('Dihedral'):
+
+
     return ConstraintDict
 
   def reassemble_atompair_cst(self, Name1, Res1, Name2, Res2, ConstraintParameters):
