@@ -6,7 +6,7 @@ Run on expanded pose with src range tag in pdb name like:
 
 '''
 
-#'''
+'''
 # from repo 
 import solenoid_tools
 

@@ -45,17 +45,17 @@ class constraint_extrapolator:
       LineList = Line.split()
       if Line.startswith('AtomPair'):
         CstType, Name1, Res1, Name2, Res2 = tuple( LineList[:5] )
-        AtomResidueCoords = [ (Name1, Res1), (Name2, Res2) ]
+        AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ) ]
         ConstraintParameters = LineList[5:]
 
       elif Line.startswith('Angle'):
         CstType, Name1, Res1, Name2, Res2, Name3, Res3 = tuple( LineList[:7] )
-        AtomResidueCoords = [ (Name1, Res1), (Name2, Res2), (Name3, Res3) ]
+        AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ), (Name3, int(Res3) ) ]
         ConstraintParameters = LineList[7:]
 
       elif Line.startswith('Dihedral'):        
         CstType, Name1, Res1, Name2, Res2, Name3, Res3, Name4, Res4  = tuple( LineList[:9] )
-        AtomResidueCoords = [ (Name1, Res1), (Name2, Res2), (Name3, Res3), (Name4, Res4) ]
+        AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ), (Name3, int(Res3) ), (Name4, int(Res4) ) ]
         ConstraintParameters = LineList[9:]
       
       elif Line.startswith('#'):  
@@ -85,11 +85,18 @@ class constraint_extrapolator:
           self.Cst[Residue][Atom] = [ (AtomResidueCoords, ConstraintParameters, iLine+1, LineList[0]) ] 
 
       # return AtomResidueCoords
+  def output_cst(self, ConstraintTuples, FileName):
+    with open(FileName, 'w') as CstFile:  
+      for CstTuple in ConstraintTuples:
+        CstString = self.reassemble_cst( CstTuple[3], CstTuple[0], CstTuple[1] )
+        print>>CstFile, CstString 
+      # pass
 
   def reassemble_cst(self, ConstraintType, AtomNameResNumberPairs, ConstraintParameters):
-
-    assert len(AtomNameResNumberPairs) % 2 == 0, ' Atom name / residue number list must be equal length ! '
-    assert len(AtomNameResNumberPairs) > 6, ' more than 3 Atom name / residue pairs '
+    print 'AtomNameResNumberPairs', AtomNameResNumberPairs
+   
+    # assert len(AtomNameResNumberPairs) % 2 == 0, ' Atom name / residue number list must be equal length ! '
+    assert len(AtomNameResNumberPairs) <= 4, ' more than 4 Atom name / residue pairs '
 
     AtomResidueStringFormatingList = []
     for AtomResTuple in AtomNameResNumberPairs:
@@ -97,9 +104,7 @@ class constraint_extrapolator:
       	AtomResidueStringFormatingList.append( str(Item) )
     
     AtomResidueString = ' '.join( AtomResidueStringFormatingList )
-
     return '%s %s %s'%(ConstraintType, AtomResidueString , ' '.join(ConstraintParameters) )
-
 
   def reassemble_atompair_cst(self, Name1, Res1, Name2, Res2, ConstraintParameters):
     return 'AtomPair %s %d %s %d %s'%(Name1, Res1, Name2, Res2, ' '.join(ConstraintParameters) )
@@ -115,39 +120,38 @@ class constraint_extrapolator:
     else:
       return True
 
-  def extrapolate_from_repeat_unit(self, ReferenceStart, ReferenceEnd, RepeatUnitLength, NewPose):
-    ''' renumbers based on repeat unit pose '''
-    self.Range = (1, NewPose.n_residue())
-    self.NewPoseStartShift = ReferenceStart - 1 # for 1 indexing
-    # Loop through positions in range of archetype
-    # To avoid double counting first only add constraints from archetype residues to 
-    # more C-terminal residues 
-    
-    # To hold extrapolated constraints
-    NewCsts = []
+  def shift_and_sort_constraints(self, ReferenceStart, ReferenceEnd, RepeatUnitLength):  
+    # One of two edge sets will be chosen based on the ability of existing amino acids to host the interactions
+    # and the scores of the constraints on the extrapolated pose
     
     # For catching when individual constraints have been considered already  
     Redundict = {}
 
-    NewResNum = NewPose.n_residue()
-    UnitShiftMultiples = (NewResNum / RepeatUnitLength) + 1
-    UnitShiftList = [ RepeatUnitLength * Multiple for Multiple in range( UnitShiftMultiples+1 ) ] 
+    # Occur between first turn of repeat and upstream residues
+    Edge1Cst = []
+    # Occur between last turn of repeat and downstream residues 
+    Edge2Cst = []
+    # Occur in middle of repeat, will be included either way
+    MiddleCst = []
 
-    for ReferencePosition in range(ReferenceStart, ReferenceEnd+1):
-      # Skip 
+    ShiftToRepeat = ReferenceStart - 1
+
+    for ExtrapolationIndex, ReferencePosition in enumerate( range(ReferenceStart, ReferenceEnd+1) ):
+      ExtrapolationPosition = ExtrapolationIndex + 1
+      # Skip positions w/out constraints
       try:
+        # print 'trying: ', ReferencePosition
         ReferencePositionCstDict = self.Cst[ReferencePosition]
       except KeyError:
         continue
 
-      print
-      print 'ReferencePosition: ', ReferencePosition
+      # ReferencePositionCstDict
+
       # print 'shifted: ', self.shift(ReferencePosition)
-      # print 'ReferencePositionCstDict: ', ReferencePositionCstDict
-      
+      # print 'ReferencePositionCstDict: ', ReferencePositionCstDict 
+
       for AtomName in ReferencePositionCstDict:
-        print 'AtomName: ', AtomName
-        
+        # print 'AtomName: ', AtomName
         # Loop through constraint tuples in hash
         for Constraint in ReferencePositionCstDict[AtomName]:
 
@@ -163,37 +167,111 @@ class constraint_extrapolator:
             # to prevent examining individual constraint again in subsequent iterations
             Redundict[CstLineNumber] = 1
 
-          # not sure if useful
-          RepeatCstPass = True
-          RepeatCsts = []
+          print 'ReferenceStart, ReferenceEnd', ReferenceStart, ReferenceEnd
+          print 'ReferencePosition:', ReferencePosition
+          print 'ExtrapolationPosition:', ExtrapolationPosition
+          print 'Constraint:', Constraint
+          print 'AtomResidueCoords:', AtomResidueCoords
 
-          # Loops through all repeat positions corresponding to reference position
-          for UnitShift in UnitShiftList:
-            ShiftedReference = self.shift(ReferencePosition) + UnitShift
-            ShiftedOther = self.shift(OtherPosition) + UnitShift
+          # ResidueNumber are shifted to correspond with first repeat unit in the extrapolated pose
+          RepeatAtomResidueCoords = []
+          E1 = 0
+          E2 = 0
+          Mid = 0
+
+          # iterate thorugh atom reisdue pairs
+          for AtomResiduePair in AtomResidueCoords:
+            # print 'AtomResiduePair', AtomResiduePair
+            RepeatPosition = (AtomResiduePair[1]) - ShiftToRepeat
+            # print 'RepeatPosition', RepeatPosition
+            RepeatAtomResidueCoords.append( ( AtomResiduePair[0], RepeatPosition ) )
             
-            # looking for 
-            if self.in_range(ShiftedReference) and self.in_range(ShiftedOther):
-              # perhaps instead of removing these constraints, the residue should be changed. This would require cst and pose extrapolation to be intergrated
-              # BUT this would get confusing because constraints may involve mutually exclusive 
-              if NewPose.residue(ShiftedReference).has(AtomName) and NewPose.residue(ShiftedOther).has(OtherName):
-                CST = self.reassemble_cst( CstType, AtomResidueCoords, ConstraintParameters )
-                # print CST
-                RepeatCsts.append(CST)
-              else:
-                RepeatCstPass = False
+            if RepeatPosition < 1:
+              E1 += 1
+            elif RepeatPosition > RepeatUnitLength:
+              E2 += 1
+            else:
+              Mid += 1
 
-          print 'RepeatCsts:', RepeatCsts
-          if RepeatCstPass:
-            print 'RepeatPosition'  
-          NewCsts.extend(RepeatCsts)
+          ShiftedConstraint = RepeatAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType
 
-    print ' out of loop '
-    print 'NewCsts', NewCsts
+          print 'E1', E1
+          print 'E2', E2
+          print 'Mid', Mid
+          print          
+          
+          if Mid:
+            if E1 and E2:
+              MiddleCst.append(ShiftedConstraint)
+            elif E1:
+              Edge1Cst.append(ShiftedConstraint)
+            elif E2:
+              Edge2Cst.append(ShiftedConstraint)
+            else:
+              MiddleCst.append(ShiftedConstraint)
+            # print 'Edge1 and Edge2'
+            # sys.exit()
+    
+    return ( Edge1Cst, Edge2Cst, MiddleCst )
+
+
+  def extrapolate_from_repeat_unit(self, ReferenceStart, ReferenceEnd, RepeatUnitLength, NewPose):
+    ''' renumbers based on repeat unit pose '''
+    self.Range = (1, NewPose.n_residue())
+    self.NewPoseStartShift = ReferenceStart - 1 # for 1 indexing
+    # Loop through positions in range of archetype
+    # To avoid double counting first only add constraints from archetype residues to 
+    # more C-terminal residues 
+    
+    print 'UnitShiftList', UnitShiftList
+    Edge1Cst, Edge2Cst, MiddleCst = self.shift_and_sort_constraints(ReferenceStart, ReferenceEnd, RepeatUnitLength)
+    
+    print 'Edge1Cst:', Edge1Cst
+    print 'Edge2Cst:', Edge2Cst
+    print 'MiddleCst:', MiddleCst
+    print 
+
+    self.output_cst(Edge1Cst, 'Edge1.cst')
+    self.output_cst(Edge2Cst, 'Edge2.cst')
+    self.output_cst(MiddleCst, 'Middle.cst')
+
+    RepeatCoreConstraints = []
+    
+    # for Constraint in MiddleCst:
+      
+    #   AtomResidueCoords, ConstraintParameters, CstLineNumber, CstType
+      
+
+    # AtomResidueCoords, ConstraintParameters, CstLineNumber, CstType = Constraint
+
+
+    # return 0 
+    #       # Loops through all repeat positions corresponding to reference position
+    #       for UnitShift in UnitShiftList[1:-1]:
+    #         print 'Middle:' UnitShift
+    #         ShiftedReference = self.shift(ReferencePosition) + UnitShift
+    #         ShiftedOther = self.shift(OtherPosition) + UnitShift            
+    #         # looking for 
+    #         if self.in_range(ShiftedReference) and self.in_range(ShiftedOther):
+    #           # perhaps instead of removing these constraints, the residue should be changed. This would require cst and pose extrapolation to be intergrated
+    #           # BUT this would get confusing because constraints may involve mutually exclusive 
+    #           if NewPose.residue(ShiftedReference).has(AtomName) and NewPose.residue(ShiftedOther).has(OtherName):
+    #             CST = self.reassemble_cst( CstType, AtomResidueCoords, ConstraintParameters )
+    #             # print CST
+    #             RepeatCsts.append(CST)
+    #           else:
+    #             RepeatCstPass = False
+    #       # print 'RepeatCsts:', RepeatCsts
+    #       # if RepeatCstPass:
+    #       #   print 'RepeatPosition'  
+    #       NewCsts.extend(RepeatCsts)
+
+    # print ' out of loop '
+    # print 'NewCsts', NewCsts
     return NewCsts
 
-   # with open( '%s%s_rep%dextra%d.cst'%(Args.out, InputPdbStem, RepeatUnitLength, i+1), 'w' ) as CstFile:
-   #   print>>CstFile, ExtrapolationTuple[1]
+    # with open( '%s%s_rep%dextra%d.cst'%(Args.out, InputPdbStem, RepeatUnitLength, i+1), 'w' ) as CstFile:
+    #   print>>CstFile, ExtrapolationTuple[1]
 
 # embrassingly parallel function for  
 def extrapolate_constraints(Pose, CstFile):
@@ -240,6 +318,8 @@ def main(argv=None):
   # # Apply constraints to pose
   # Constrainer.apply(ReferencePose)
 
+  # return Constrainer
+
   Pdbs = glob.glob( '*%s*.pdb'%Args.repeat_pdb_tag ) 
   assert len(Pdbs), r"No pdbs found with glob: \n %s \n '* % s *.pdb' % Args.repeat_pdb_tag "%Args.repeat_pdb_tag
   
@@ -260,8 +340,15 @@ def main(argv=None):
     print 'RepeatLength', RepeatLength
     print
     
-    return Constrainer.extrapolate_from_repeat_unit(SourceRanges[0][0], SourceRanges[0][1], RepeatLength, Pose)
-  
+    ExtrapolatedConstraints = Constrainer.extrapolate_from_repeat_unit(SourceRanges[0][0], SourceRanges[0][1], RepeatLength, Pose)
+    
+
+
+    if Pdb == 'src14_25__18_29_rep12_1EZG.pdb':
+      sys.exit()
+
+
+    print 'ExtrapolatedConstraints', ExtrapolatedConstraints
   # return Constrainer
 
 # if __name__ == "__main__":

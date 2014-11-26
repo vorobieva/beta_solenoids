@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 InfoString = ''' 
-To optimize repeat backbone with NCS torsion constraint and O-N atom pair constraints'''
+To optimize repeat backbone with NCS torsion constraint and other constraints'''
 
 # '''
 # # from repo 
