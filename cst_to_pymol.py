@@ -3,13 +3,13 @@
 # 8/14/14
 # Baker Lab UW
 
-# From Will's header from pymol_util
-#####################################
-import sys,os,inspect
-newpath = os.path.dirname(inspect.getfile(inspect.currentframe())) # script directory
-if not newpath in sys.path:
-  sys.path.append(newpath)
-# end of elements from Will's header 
+# # From Will's header from pymol_util
+# #####################################
+# import sys,os,inspect
+# newpath = os.path.dirname(inspect.getfile(inspect.currentframe())) # script directory
+# if not newpath in sys.path:
+#   sys.path.append(newpath)
+# # end of elements from Will's header 
 
 # print 'newpath','/'.join(newpath.split('/')[:-1])
 

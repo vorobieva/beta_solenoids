@@ -98,10 +98,6 @@ def optimize_repeat_pdb( (Pdb, Cst, RepeatLength) ):
   ScoreFunction.set_weight(rosetta.angle_constraint, 1.0)
   ScoreFunction.set_weight(rosetta.dihedral_constraint, 1.0)
 
-  # # normal relax??
-  RelaxerClassic = rosetta.ClassicRelax(ScoreFunction)  
-  # #fast relax
-
   if Cst:
     # make constraint mover
     Constrainer = rosetta.ConstraintSetMover()
@@ -120,10 +116,7 @@ def optimize_repeat_pdb( (Pdb, Cst, RepeatLength) ):
   rosetta.relax_pose(Pose, ScoreFunction, 'tag')
   # FastRelax asymmetric
   rosetta.relax_pose(SymmPose, ScoreFunction, 'tag')
-  # #  relax
-  # RelaxerClassic.apply(Pose)
-  # # symmetric relax 
-  # RelaxerClassic.apply(SymmPose)
+
 
   rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_asymm.pdb') )
   rosetta.dump_pdb(SymmPose, Pdb.replace('.pdb', '_symm.pdb') )
