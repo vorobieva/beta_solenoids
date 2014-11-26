@@ -37,21 +37,21 @@ def main(argv = None):
     for Index, Line in enumerate(CstLines):
       if Line.startswith('AtomPair'):
         CstType, Name1, Res1, Name2, Res2 = tuple( Line.split()[:5] )
-        if Args.multi:
+        if not Args.multi:
           print 'dist %s, name %s and resi %s, name %s and resi %s'%('cst_%d_dist'%(Index+1), Name1, Res1, Name2, Res2)
         else:
           print 'dist %s, name %s and resi %s and %s, name %s and resi %s and %s'%('cst_%d_dist'%(Index+1), Name1, Res1, NameTag, Name2, Res2, NameTag)
 
       elif Line.startswith('Angle'):
         CstType, Name1, Res1, Name2, Res2, Name3, Res3 = tuple( Line.split()[:7] )
-        if Args.multi:
+        if not Args.multi:
           print 'angle %s, name %s and resi %s, name %s and resi %s, name %s and resi %s'%('cst_%d_angle'%(Index+1), Name1, Res1, Name2, Res2, Name3, Res3)
         else:
           print 'angle %s, name %s and resi %s and %s, name %s and resi %s and %s, name %s and resi %s and %s'%('cst_%d_angle'%(Index+1), Name1, Res1, NameTag, Name2, Res2, NameTag, Name3, Res3, NameTag)
 
       elif Line.startswith('Dihedral'):
         CstType, Name1, Res1, Name2, Res2, Name3, Res3, Name4, Res4 = tuple( Line.split()[:9] )
-        if Args.multi:
+        if not Args.multi:
           print 'dihedral %s, name %s and resi %s, name %s and resi %s, name %s and resi %s, name %s and resi %s'%('cst_%d_tor'%(Index+1), Name1, Res1, Name2, Res2, Name3, Res3, Name4, Res4)
         else:
           print 'dihedral %s, name %s and resi %s and %s, name %s and resi %s and %s, name %s and resi %s, and %s name %s and resi %s and %s'%('cst_%d_tor'%(Index+1), Name1, Res1, NameTag, Name2, Res2, NameTag, Name3, Res3, NameTag, Name4, Res4, NameTag)
