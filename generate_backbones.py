@@ -13,8 +13,6 @@ AtomPair constraint.
 '''
 
 #'''
-# from repo 
-import solenoid_tools
 
 # libraries
 from scipy import spatial
@@ -27,10 +25,15 @@ import sys
 import os
 import re
 
-import rosetta
-# rosetta.init()
-rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
-from rosetta.protocols import grafting 
+if '-h' not in sys.argv:
+  import rosetta
+  # rosetta.init()
+  rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
+  from rosetta.protocols import grafting 
+
+  # from repo 
+  import solenoid_tools
+
 
 # ''' 
 

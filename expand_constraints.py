@@ -14,14 +14,24 @@ import numpy as np
 import subprocess
 import argparse
 import glob
+import time 
 import sys
 import os
 import re
 
 import rosetta
 # rosetta.init()
-rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
+
+## debug
+# rosetta.init(extra_options = "-out:level 1000")
+
+## normal
+rosetta.init()
+
+## runtime
+# rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
 from rosetta.protocols import grafting 
+from rosetta.utility import ostream
 
 # ''' 
 sys.argv = [sys.argv[0], '-repeat_pdb_tag', '_1EZG', '-reference_pdb', '1EZG.pdb', '-reference_cst', '1EZG_ON_All.cst']
@@ -164,11 +174,11 @@ class constraint_extrapolator:
             # to prevent examining individual constraint again in subsequent iterations
             Redundict[CstLineNumber] = 1
 
-          print 'ReferenceStart, ReferenceEnd', ReferenceStart, ReferenceEnd
-          print 'ReferencePosition:', ReferencePosition
-          print 'ExtrapolationPosition:', ExtrapolationPosition
-          print 'Constraint:', Constraint
-          print 'AtomResidueCoords:', AtomResidueCoords
+          # print 'ReferenceStart, ReferenceEnd', ReferenceStart, ReferenceEnd
+          # print 'ReferencePosition:', ReferencePosition
+          # print 'ExtrapolationPosition:', ExtrapolationPosition
+          # print 'Constraint:', Constraint
+          # print 'AtomResidueCoords:', AtomResidueCoords
 
           # ResidueNumber are shifted to correspond with first repeat unit in the extrapolated pose
           RepeatAtomResidueCoords = []
@@ -210,10 +220,16 @@ class constraint_extrapolator:
     
     return ( Edge1Cst, Edge2Cst, BothEdges, MiddleCst )
 
+  def parse_ostream_cst(self, String):
+    ModString = String.replace('Angle', '!Angle').replace('Dihedral', '!Dihedral').replace('AtomPair', '!AtomPair') 
+    List = ModString.split('!')
+    ModList = [ String for String in List if len(String) > 2 ]
+    return ModList
   # def inbound(self, UpEdge, DownEdge, AtomResidueCoords):
     # AtomResidueCoords = [ UpEdge ] 
 
-  def extrapolate_from_repeat_unit(self, ReferenceStart, ReferenceEnd, RepeatUnitLength, NewPose):
+
+  def extrapolate_from_repeat_unit(self, ReferenceStart, ReferenceEnd, RepeatUnitLength, NewPose, FinalCstName):
     ''' renumbers based on repeat unit pose '''
 
     # Loop through positions in range of archetype
@@ -223,8 +239,8 @@ class constraint_extrapolator:
     self.Range = (1, NewLength)
     self.NewPoseStartShift = ReferenceStart - 1 # for 1 indexing
 
-    UnitShiftMultiples = (NewLength / RepeatUnitLength) + 1
-    UnitShiftList = [ RepeatUnitLength * Multiple for Multiple in range( UnitShiftMultiples + 1 ) ] 
+    UnitShiftMultiples = (NewLength / RepeatUnitLength)
+    UnitShiftList = [ RepeatUnitLength * Multiple for Multiple in range( UnitShiftMultiples ) ] 
     
     Edge1Cst, Edge2Cst, BothEdgeCst, MiddleCst = self.shift_and_sort_constraints(ReferenceStart, ReferenceEnd, RepeatUnitLength)
     
@@ -232,46 +248,71 @@ class constraint_extrapolator:
     self.output_cst(Edge2Cst, 'Edge2.cst')
     self.output_cst(BothEdgeCst, 'BothEdgeCst.cst')
     self.output_cst(MiddleCst, 'Middle.cst')
-    print 'Edge1Cst:', Edge1Cst, '\n'
-    print 'Edge2Cst:', Edge2Cst, '\n'
-    print 'BothEdgeCst:', BothEdgeCst, '\n'
-    print 'MiddleCst:', MiddleCst, '\n'
-
+    # print 'Edge1Cst:', Edge1Cst, '\n'
+    # print 'Edge2Cst:', Edge2Cst, '\n'
+    # print 'BothEdgeCst:', BothEdgeCst, '\n'
+    # print 'MiddleCst:', MiddleCst, '\n'
+    print 'UnitShiftList:', UnitShiftList
+    print 'RepeatUnitLength:', RepeatUnitLength
+    
     MiddleRepeatCstList = []
+    MiddleSkippedCst = 0
     for Constraint in MiddleCst:
       AtomResidueCoords, ConstraintParameters, CstLineNumber, CstType = Constraint
       # Loops through all repeat positions corresponding to reference position
-      for Shift in UnitShiftList[:-1]:
+      for Shift in UnitShiftList:
         # print 'Shift:', Shift
         # print 'AtomResidueCoords:', AtomResidueCoords
         ShiftedAtomResidueCoords = [ (AtomName, ResidueNumber+Shift) for AtomName, ResidueNumber in AtomResidueCoords ]
-        MiddleRepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
+        if pose_has(NewPose, ShiftedAtomResidueCoords):
+          MiddleRepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
+        else:
+          MiddleSkippedCst += 1
+          # print 'Skipping constraint involving:', ShiftedAtomResidueCoords
 
     Edge1RepeatCstList = []
+    Edge1SkippedCst = 0
     for Constraint in Edge1Cst:
       AtomResidueCoords, ConstraintParameters, CstLineNumber, CstType = Constraint
-      for Shift in UnitShiftList[1:-1]:
+      for Shift in UnitShiftList[1:]:
         ShiftedAtomResidueCoords = [ (AtomName, ResidueNumber+Shift) for AtomName, ResidueNumber in AtomResidueCoords ]
-        Edge1RepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
-
+        if pose_has(NewPose, ShiftedAtomResidueCoords):        
+          Edge1RepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
+        else:
+          Edge1SkippedCst += 1
+          # print 'Skipping constraint involving:', ShiftedAtomResidueCoords
+    
     Edge2RepeatCstList = []     
+    Edge2SkippedCst = 0
     for Constraint in Edge2Cst:
       AtomResidueCoords, ConstraintParameters, CstLineNumber, CstType = Constraint
-      for Shift in UnitShiftList[:-2]:
+      for Shift in UnitShiftList[:-1]:
         ShiftedAtomResidueCoords = [ (AtomName, ResidueNumber+Shift) for AtomName, ResidueNumber in AtomResidueCoords ]
-        Edge2RepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
-    
-    BothEdgeRepeatCstList = [] 
+        if pose_has(NewPose, ShiftedAtomResidueCoords):       
+          Edge2RepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
+        else:
+          Edge2SkippedCst += 1
+          # print 'Skipping constraint involving:', ShiftedAtomResidueCoords
+
+    BothEdgeRepeatCstList = []
+    BothEdgeSkippedCst = 0
     for Constraint in BothEdgeCst:
       AtomResidueCoords, ConstraintParameters, CstLineNumber, CstType = Constraint
-      for Shift in UnitShiftList[1:-2]:
+      
+      for Shift in UnitShiftList:
         ShiftedAtomResidueCoords = [ (AtomName, ResidueNumber+Shift) for AtomName, ResidueNumber in AtomResidueCoords ]
-        BothEdgeRepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
+        if pose_has(NewPose, ShiftedAtomResidueCoords):
+          BothEdgeRepeatCstList.append( ( ShiftedAtomResidueCoords, ConstraintParameters, CstLineNumber, CstType ) )
+        else:
+          BothEdgeSkippedCst += 1
+          # print 'Skipping constraint involving:', ShiftedAtomResidueCoords
 
-    self.output_cst(MiddleRepeatCstList, 'MiddleRepeats.cst')
-    self.output_cst(Edge1RepeatCstList, 'Edge1Repeats.cst')
-    self.output_cst(Edge2RepeatCstList, 'Edge2Repeats.cst')
-    self.output_cst(BothEdgeRepeatCstList, 'BothEdgeRepeats.cst')
+    # RepPose.constraint_set().show_definition(ostream(sys.stdout), RepPose )
+
+    self.output_cst(MiddleRepeatCstList, 'MidRep.cst')
+    self.output_cst(Edge1RepeatCstList, 'Edge1Rep.cst')
+    self.output_cst(Edge2RepeatCstList, 'Edge2Rep.cst')
+    self.output_cst(BothEdgeRepeatCstList, 'BothEdgeRep.cst')
     
     AllRepeatCst = Edge1RepeatCstList[:]
     AllRepeatCst.extend(Edge1RepeatCstList)
@@ -280,74 +321,130 @@ class constraint_extrapolator:
     self.output_cst(AllRepeatCst, 'AllRepeatCst.cst')
 
     ''' trying out constraints to pick between edge 1 and edge 2 (and filter?) '''
+    print
+    print 'MiddleSkippedCst', MiddleSkippedCst
+    print 'Edge1SkippedCst', Edge1SkippedCst
+    print 'Edge2SkippedCst', Edge2SkippedCst
+    print 'BothEdgeSkippedCst', BothEdgeSkippedCst
+    print
+    # print 'MiddleRepeatCst' 
+    NumberMiddleRepeatCst = len(MiddleRepeatCstList)
+    # print 'Edge1RepeatCst'
+    NumberEdge1RepeatCst = len(Edge1RepeatCstList)
+    # print 'Edge2RepeatCst'
+    NumberEdge2RepeatCst = len(Edge2RepeatCstList)
+    # print 'BothEdgeRepeatCst'
+    NumberBothEdgeRepeatCst = len(BothEdgeRepeatCstList)
 
-    # default talaris 2013 score function
+    NumberAllRepeatCst = len(AllRepeatCst)
+    # # All default talaris 2013 non zero weights set to zero
     CstScoreFunction = set_all_weights_zero( rosetta.getScoreFunction() )
 
-    # turning on constraint weights
-    CstScoreFunction.set_weight( rosetta.atom_pair_constraint, 100.0 )
-    CstScoreFunction.set_weight( rosetta.angle_constraint, 10.0 )
+    # # turning on constraint weights
+    CstScoreFunction.set_weight( rosetta.atom_pair_constraint, 1.0 )
+    CstScoreFunction.set_weight( rosetta.angle_constraint, 1.0 )
     CstScoreFunction.set_weight( rosetta.dihedral_constraint, 1.0 )
 
+    print 'MiddlePose should have %d constraints !!! '%NumberMiddleRepeatCst 
     MiddlePose = NewPose.clone()
-    ConstraintMover = rosetta.ConstraintSetMover()
-    ConstraintMover.constraint_file('MiddleRepeats.cst')  
-    return ConstraintMover
-
-    ConstraintMover.apply(MiddlePose) 
-    return ConstraintMover
-
-    print 'MiddlePose'   
+    ConstraintSetter = rosetta.ConstraintSetMover()
+    ConstraintSetter.constraint_file('MidRep.cst')  
+    ConstraintSetter.apply(MiddlePose) 
+    # return ConstraintSetter
+    # return MiddlePose
     CstScoreFunction.show(MiddlePose)
-    print 
-    print 
+    # MiddlePose.constraint_set().show_definition(ostream(sys.stdout), MiddlePose )
+    print
+
+    print 'Edge1Pose should have %d constraints !!! '%NumberEdge1RepeatCst   
     Edge1Pose = NewPose.clone()
-    ConstraintMover = rosetta.ConstraintSetMover()
-    ConstraintMover.constraint_file('Edge1Repeats.cst')  
-    ConstraintMover.apply(Edge1Pose) 
-    print 'Edge1Pose'   
+    ConstraintSetter = rosetta.ConstraintSetMover()
+    ConstraintSetter.constraint_file('Edge1Rep.cst')  
+    ConstraintSetter.apply(Edge1Pose) 
     CstScoreFunction.show(Edge1Pose)
-    print 
-    print 
+    if NumberEdge1RepeatCst:
+      Edge1Score = CstScoreFunction(Edge1Pose)
+      Edge1ScoreNorm = Edge1Score / NumberEdge1RepeatCst
+    # Edge1Pose.constraint_set().show_definition(ostream(sys.stdout), Edge1Pose )
+    print
+
+    print 'Edge2Pose should have %d constraints !!! '%NumberEdge2RepeatCst   
     Edge2Pose = NewPose.clone()
-    ConstraintMover = rosetta.ConstraintSetMover()
-    ConstraintMover.constraint_file('Edge2Repeats.cst')  
-    ConstraintMover.apply(Edge2Pose) 
-    print 'Edge2Pose'   
+    ConstraintSetter = rosetta.ConstraintSetMover()
+    ConstraintSetter.constraint_file('Edge2Rep.cst')  
+    ConstraintSetter.apply(Edge2Pose) 
     CstScoreFunction.show(Edge2Pose)
+    if NumberEdge2RepeatCst:
+      Edge2Score = CstScoreFunction(Edge2Pose)
+      Edge2ScoreNorm = Edge2Score / NumberEdge2RepeatCst
+    # Edge2Pose.constraint_set().show_definition(ostream(sys.stdout), Edge2Pose )
     print 
-    print 
-    AllCstPose = NewPose.clone()
-    ConstraintMover = rosetta.ConstraintSetMover()
-    ConstraintMover.constraint_file('AllRepeatCst.cst')  
-    ConstraintMover.apply(AllCstPose) 
-    print 'AllCstPose'   
-    CstScoreFunction.show(AllCstPose)
     
-    return ConstraintMover
-      # ShiftedReference = self.shift(ReferencePosition) +Shift
-      # ShiftedOther = self.shift(OtherPosition) +Shift            
-      #   # looking for 
-      #   if self.in_range(ShiftedReference) and self.in_range(ShiftedOther):
-      #     # perhaps instead of removing these constraints, the residue should be changed. This would require cst and pose extrapolation to be intergrated
-      #     # BUT this would get confusing because constraints may involve mutually exclusive 
-      #     if NewPose.residue(ShiftedReference).has(AtomName) and NewPose.residue(ShiftedOther).has(OtherName):
-      #       CST = self.reassemble_cst( CstType, AtomResidueCoords, ConstraintParameters )
-      #       # print CST
-      #       RepeatCsts.append(CST)
-      #     else:
-      #       RepeatCstPass = False
-      # # print 'RepeatCsts:', RepeatCsts
-      # # if RepeatCstPass:
-      # #   print 'RepeatPosition'  
-      # NewCsts.extend(RepeatCsts)
+    print 'BothEdgePose should have %d constraints !!! '%NumberBothEdgeRepeatCst   
+    BothEdgePose = NewPose.clone()
+    ConstraintSetter = rosetta.ConstraintSetMover()
+    ConstraintSetter.constraint_file('AllRepeatCst.cst')  
+    ConstraintSetter.apply(BothEdgePose) 
+    CstScoreFunction.show(BothEdgePose)
+    if NumberBothEdgeRepeatCst:
+      BothEdgeScore = CstScoreFunction(BothEdgePose)
+      BothEdgeScoreNorm = BothEdgeScore / NumberBothEdgeRepeatCst
+    # BothEdgePose.constraint_set().show_definition(ostream(sys.stdout), BothEdgePose )
+    print 
 
-    # print ' out of loop '
-    # print 'NewCsts', NewCsts
-    # return NewCsts
+    print 'AllCstPose should have %d constraints !!! '%NumberAllRepeatCst   
+    AllCstPose = NewPose.clone()
+    ConstraintSetter = rosetta.ConstraintSetMover()
+    ConstraintSetter.constraint_file('AllRepeatCst.cst')  
+    ConstraintSetter.apply(AllCstPose) 
+    CstScoreFunction.show(AllCstPose)
+    # AllCstPose.constraint_set().show_definition(ostream(sys.stdout), AllCstPose )
+    print 
 
-    # with open( '%s%s_rep%dextra%d.cst'%(Args.out, InputPdbStem, RepeatUnitLength, i+1), 'w' ) as CstFile:
-    #   print>>CstFile, ExtrapolationTuple[1]
+    CuratedRepeatCst = MiddleRepeatCstList[:]
+    ## whether these should be included or not is up in the air!!
+    # CuratedRepeatCst.extend(BothEdgeRepeatCstList)
+
+    if NumberEdge1RepeatCst and NumberEdge2RepeatCst:
+      if Edge1ScoreNorm <= Edge2ScoreNorm:
+        CuratedRepeatCst.extend(Edge1RepeatCstList)
+      else:
+        CuratedRepeatCst.extend(Edge2RepeatCstList)
+
+    elif NumberEdge1RepeatCst:
+      CuratedRepeatCst.extend(Edge1RepeatCstList)
+    elif NumberEdge2RepeatCst:
+      CuratedRepeatCst.extend(Edge2RepeatCstList)
+
+    # CuratedRepeatCst
+    # print 'Edge1ScoreNorm, Edge2ScoreNorm', Edge1ScoreNorm, Edge2ScoreNorm
+    self.output_cst(CuratedRepeatCst, FinalCstName)
+
+
+def pose_has(Pose, AtomResidueCoords):
+  for AtomName, ResidueNumber in AtomResidueCoords:
+    if ResidueNumber < 1:
+      # print AtomResidueCoords
+      # print 'check now!!!'
+      # time.sleep(2)
+      return False
+    try:
+      Residue = Pose.residue(ResidueNumber)
+    except RuntimeError:
+      return False
+    # Continue only if
+    # residue has atom
+    if Residue.has(AtomName):
+      # and this atom is not virtual
+      if Residue.is_virtual(Residue.atom_index(AtomName)):
+        return False
+      else:
+        continue
+
+    else:
+      return False
+  return True
+
 
 def set_all_weights_zero(ScoreFunction):
   ScoreFunction.set_weight(rosetta.fa_atr, 0.0) 
@@ -420,6 +517,9 @@ def main(argv=None):
   
   # print 'Pdbs', Pdbs
   for Pdb in Pdbs:
+
+    # if Pdb == 'src15_38__22_45_rep24_1EZG.pdb':
+
     print 'Pdb:', Pdb 
     Pose = rosetta.pose_from_pdb(Pdb)
 
@@ -435,15 +535,17 @@ def main(argv=None):
     print 'RepeatLength', RepeatLength
     print
     
-    ExtrapolatedConstraints = Constrainer.extrapolate_from_repeat_unit(SourceRanges[0][0], SourceRanges[0][1], RepeatLength, Pose)
-  
+    # print [Pdb]
 
-    if Pdb == 'src14_25__18_29_rep12_1EZG.pdb':
-      return ExtrapolatedConstraints
-      sys.exit()
+    CstName = (Pdb+'!').replace('.pdb!', '.cst')
+    ExtrapolatedConstraints = Constrainer.extrapolate_from_repeat_unit(SourceRanges[0][0], SourceRanges[0][1], RepeatLength, Pose, CstName)
+    
+    # print Pdb
+    # return ExtrapolatedConstraints
+    # sys.exit()
 
 
-    print 'ExtrapolatedConstraints', ExtrapolatedConstraints
+    # print 'ExtrapolatedConstraints', ExtrapolatedConstraints
   # return Constrainer
 
 # if __name__ == "__main__":

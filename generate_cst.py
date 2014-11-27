@@ -12,7 +12,6 @@ This script is to generate ATOMPAIR constraints for Rosetta,
 # uncomment just next line and copy block in multiline string for ipython mode
 # '''
 
-import solenoid_tools
 
 from multiprocessing import Process
 from scipy import spatial
@@ -24,8 +23,10 @@ import sys
 import os
 import re
 
-import rosetta
-rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
+if '-h' not in sys.argv:
+  import solenoid_tools
+  import rosetta
+  rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
 
 # ''', #sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 
@@ -116,6 +117,10 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
       #   for UpAtm in range( 1, Pose.residue(UpRes).natoms() + 1 ):
       UpName = Pose.residue(UpRes).atom_name(UpAtm).replace(' ', '')
 
+      # skip virtual residues
+      if Pose.residue(UpRes).is_virtual(UpAtm):
+        continue
+
       #                                this guy 
       #                                 /
       # checks upstream name           V
@@ -147,6 +152,10 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
             if UpRes == DownRes:
               if UpName == DownName:
                 continue
+
+            # skip virtual residues
+            if Pose.residue(DownRes).is_virtual(DownAtm):
+              continue
 
             # checks downstream name
             if re.match( DownstreamGrep, DownName ):
@@ -233,6 +242,10 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                   if 'H' in UpNeighborName:
                     continue                
 
+                  # skip virtual residues
+                  if Pose.residue(UpNeighborRes).is_virtual(UpNeighborAtm):
+                    continue
+
                   # keep looking if neighbor is self
                   if UpNeighborName == UpName and UpNeighborRes == UpRes:
                     continue
@@ -263,6 +276,10 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                   # keep looking if neighbor is hyrdogen
                   if 'H' in DownNeighborName:
                     continue                
+
+                  # skip virtual residues
+                  if Pose.residue(DownNeighborRes).is_virtual(DownNeighborAtm):
+                    continue
 
                   # keep looking if neighbor is self
                   if DownNeighborName == DownName and DownNeighborRes == DownRes:
@@ -297,17 +314,17 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                 DownNeighbor1Vec = PDB.Vector(DownNeighbor1Tuple[3])
                 DownNeighbor2Vec = PDB.Vector(DownNeighbor2Tuple[3])
 
-                Angle1 = np.degrees( PDB.calc_angle(UpNeighbor1Vec, UpstreamVec, DownstreamVec) )
-                AngleCst1 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Angle1 )
-                Angle2 = np.degrees( PDB.calc_angle(UpstreamVec, DownstreamVec, DownNeighbor1Vec) )
-                AngleCst2 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Angle2 )
+                Angle1 = PDB.calc_angle(UpNeighbor1Vec, UpstreamVec, DownstreamVec)
+                AngleCst1 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Angle1 )
+                Angle2 = PDB.calc_angle(UpstreamVec, DownstreamVec, DownNeighbor1Vec)
+                AngleCst2 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Angle2 )
 
-                Torsion1 = np.degrees( PDB.calc_dihedral(UpNeighbor2Vec, UpNeighbor1Vec, UpstreamVec, DownstreamVec) )
-                TorsionCst1 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor2Tuple[1], UpNeighbor2Tuple[2], UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Torsion1 )
-                Torsion2 = np.degrees( PDB.calc_dihedral(UpNeighbor1Vec, UpstreamVec, DownstreamVec, DownNeighbor1Vec) )
-                TorsionCst2 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Torsion2 )
-                Torsion3 = np.degrees( PDB.calc_dihedral(UpstreamVec, DownstreamVec, DownNeighbor1Vec, DownNeighbor2Vec) )
-                TorsionCst3 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f HARMONIC %.2f 1.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], DownNeighbor2Tuple[1], DownNeighbor2Tuple[2], SasaBasedWeight, Torsion3 )
+                Torsion1 = PDB.calc_dihedral(UpNeighbor2Vec, UpNeighbor1Vec, UpstreamVec, DownstreamVec)
+                TorsionCst1 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpNeighbor2Tuple[1], UpNeighbor2Tuple[2], UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Torsion1 )
+                Torsion2 = PDB.calc_dihedral(UpNeighbor1Vec, UpstreamVec, DownstreamVec, DownNeighbor1Vec)
+                TorsionCst2 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Torsion2 )
+                Torsion3 = PDB.calc_dihedral(UpstreamVec, DownstreamVec, DownNeighbor1Vec, DownNeighbor2Vec)
+                TorsionCst3 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], DownNeighbor2Tuple[1], DownNeighbor2Tuple[2], SasaBasedWeight, Torsion3 )
 
                 # adds constraint to running lists of constraints
                 Constraints.extend( [DistanceCst, AngleCst1, AngleCst2, TorsionCst1, TorsionCst2, TorsionCst3] )
@@ -336,17 +353,17 @@ def main(argv=None):
   ArgParser = argparse.ArgumentParser(description=' nc_cst_gen.py arguments ( -help ) %s'%InfoString)
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=list, help=' input pdbs ', required=True)
-  ArgParser.add_argument('-out', type=str, help=' output directory ', default='./')
   # Optional arguments:
+  ArgParser.add_argument('-out', type=str, help=' output directory ', default='./')
   ArgParser.add_argument('-max_dist', type=float, default=3.4, help=' distance between the oxygens and downstreams ')
   ArgParser.add_argument('-min_seq_sep', type=int, default=3, help=' minimum seperation in primary sequece ')
   ArgParser.add_argument('-upstream_atom', type=str, default='[ON]\w?\d?', help=' grep for upstream atoms ')
   ArgParser.add_argument('-downstream_atom', type=str, default='[ON]\w?\d?', help=' grep for downstream atoms ')
   ArgParser.add_argument('-num_repeats', type=int, default=5, help=' number of repeats to extrapolate contacts for ')
   ArgParser.add_argument('-min_sasa',  type=float, default=0.0,  help=' floor for weighting downstream oxygen contacts ')
-  ArgParser.add_argument('-min_sasa_weight',  type=float, default=10.0,  help=' weight of floor for downstream oxygen contacts ')
+  ArgParser.add_argument('-min_sasa_weight',  type=float, default=1.0,  help=' weight of floor for downstream oxygen contacts ')
   ArgParser.add_argument('-max_sasa',  type=float, default=5.0,  help=' ceiling for cst weighting downstream oxygen contacts ')
-  ArgParser.add_argument('-max_sasa_weight',  type=float, default=1.0,  help=' weight of ceiling for downstream oxygen contacts ')
+  ArgParser.add_argument('-max_sasa_weight',  type=float, default=0.1,  help=' weight of ceiling for downstream oxygen contacts ')
   ArgParser.add_argument('-sasa_probe_radius', type=float, default=0.8,  help=' probe radius for sasa calculations ')
   ArgParser.add_argument('-renumber_pose', type=bool, default=True, help='True|False renumber pdb residues ' )
   Args = ArgParser.parse_args()
@@ -381,19 +398,19 @@ def main(argv=None):
 
     AllConstraints, SortedConstraints = get_pose_constraints(Pose, Args.max_dist, Args.min_seq_sep, Args.sasa_probe_radius, SasaScale, Args.upstream_atom, Args.downstream_atom)
     
-    CstName = OutputPdb.replace('.pdb', '_ON_All.cst')
+    CstName = OutputPdb.replace('.pdb', '_All.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(AllConstraints) 
 
     BackboneBackboneCst, BackboneSidechainCst, SidechainSidechainCst = SortedConstraints
 
-    CstName = OutputPdb.replace('.pdb', '_ON_BBBB.cst')
+    CstName = OutputPdb.replace('.pdb', '_BBBB.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(BackboneBackboneCst) 
-    CstName = OutputPdb.replace('.pdb', '_ON_BBSC.cst')
+    CstName = OutputPdb.replace('.pdb', '_BBSC.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(BackboneSidechainCst) 
-    CstName = OutputPdb.replace('.pdb', '_ON_SCSC.cst')
+    CstName = OutputPdb.replace('.pdb', '_SCSC.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(SidechainSidechainCst) 
 

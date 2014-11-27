@@ -17,11 +17,11 @@ import sys
 import os
 import re
 
-import rosetta
-# rosetta.init()
-rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
-
-from rosetta.protocols.simple_moves import symmetry
+if '-h' not in sys.argv:
+  import rosetta
+  # rosetta.init()
+  rosetta.init(extra_options = " -mute protocols") # -mute basic -mute core
+  from rosetta.protocols.simple_moves import symmetry
 
 # from rosetta.protocols import grafting 
 
@@ -113,13 +113,12 @@ def optimize_repeat_pdb( (Pdb, Cst, RepeatLength) ):
   # print 'SymmPose', SymmPose.constraint_set()
 
   # FastRelax asymmetric
-  rosetta.relax_pose(Pose, ScoreFunction, 'tag')
+  # rosetta.relax_pose(Pose, ScoreFunction, 'tag')
   # FastRelax asymmetric
   rosetta.relax_pose(SymmPose, ScoreFunction, 'tag')
 
-
-  rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_asymm.pdb') )
-  rosetta.dump_pdb(SymmPose, Pdb.replace('.pdb', '_symm.pdb') )
+  # rosetta.dump_pdb(Pose, Pdb.replace('.pdb', '_asymm.pdb') )
+  rosetta.dump_pdb(SymmPose, Pdb.replace('.pdb', '_relax.pdb') )
   # # Pose
 
 
@@ -132,8 +131,8 @@ def main(argv=None):
   ArgParser.add_argument('-thread', type=int, help=" number of threads to run simultaneously ", default=15 ) # with default, there can be only one !    
   Args = ArgParser.parse_args()
   
-  Pdbs = glob.glob('%s*pdb'%Args.pdb_stem)
-  Csts = glob.glob('%s*cst'%Args.pdb_stem)
+  Pdbs = glob.glob('*%s.pdb'%Args.pdb_stem)
+  Csts = glob.glob('*%s.cst'%Args.pdb_stem)
   Pdbs.sort()
   Csts.sort()
 
@@ -154,16 +153,16 @@ def main(argv=None):
       CstSubset = Csts[Start: End]
     
     OptimizationInputTuples = []
-
+    print 'PdbSubset:', PdbSubset 
     for i, Pdb in enumerate(PdbSubset):
-      RepeatLength = int(re.sub(r'.*rep(\d+)extra.*', r'\1', Pdb))
+      RepeatLength = int(re.sub(r'.*rep(\d+)_.*', r'\1', Pdb))
       # print RepeatLength
       if InputConstraints:
         OptimizationInputTuples.append((Pdb, CstSubset[i], RepeatLength))
       else:
         OptimizationInputTuples.append((Pdb, False, RepeatLength))
 
-    print OptimizationInputTuples
+    print 'OptimizationInputTuples:', OptimizationInputTuples
     # print Pdb_Cst_Tuples
 
     pool = Pool(processes=len(OptimizationInputTuples))
