@@ -134,7 +134,9 @@ def main(argv=None):
   Pdbs = glob.glob('*%s.pdb'%Args.pdb_stem)
   Csts = glob.glob('*%s.cst'%Args.pdb_stem)
   Pdbs.sort()
-  Csts.sort()
+
+  # future replacement for below
+  # CstHash = { ''.join(Cst.split[:-1]):Cst for Cst in Csts }
 
   if len(Csts):
     InputConstraints = True

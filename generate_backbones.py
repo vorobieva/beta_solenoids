@@ -3,13 +3,6 @@ InfoString = '''
 TO GENERATE BACKBONES AROUND STARTING STRUCTURE 
     WHICH MAY BE MODIFIED 
 BY STRECHING REPEAT REGION DESIGNATED BY NUMBER
-
-For constraints, ORDER IS CRITICAL!!!
-
-All interactions must lead with an AtomPair cst
-and all other constraints are assumed to be 
-associate with the residues in the previoues
-AtomPair constraint.
 '''
 
 #'''
@@ -186,136 +179,16 @@ def extrapolate_repeat_pose(Repeat1Pose, Repeat2Pose, Duplications):
 
   return FusionPose
 
-class constraint_extrapolator:
-  """ constraint extrapolator"""
-  def __init__(self, CstFilename):
-    self.CstFilename = CstFilename
-    # contains: ConstraintDict[Res1] = {Name1: (Name2, Res2, ConstraintParameters)} 
-    #  and      ConstraintDict[Res2] = {Name2: (Name1, Res1, ConstraintParameters)}
-    self.CstDictionary = self.parse_cst(CstFilename)
-
-  def parse_cst(self, CstFilename):
-    with open(CstFilename, 'r') as CstFile:
-      CstLines = CstFile.readlines()
-    
-    # sane
-    ConstraintDict = {}
-    # insane but easy
-    AngleCstDict = {}
-    DihedralCstDict = {}
-
-    for Line in CstLines:
-      
-      # Assumes that all constraints inbetween atom pair constraints are associated with previous atom pair
-      if Line.startswith('AtomPair'):
-        CstType, Name1, Res1, Name2, Res2 = tuple( Line.split()[:5] )
-        ConstraintParameters = Line.split()[5:]
-        
-        Res1 = int(Res1)
-        Res2 = int(Res2)
-
-        # these check for residue entry in constraint dict
-        try:
-          check = ConstraintDict[Res1]
-        except KeyError:
-          ConstraintDict[Res1] = {}
-        try:
-          check = ConstraintDict[Res2]
-        except KeyError:
-          ConstraintDict[Res2] = {}
-
-        # add atom name entries for residue subdict as needed
-        try:
-          ConstraintDict[Res1][Name1].append( (Name2, Res2, ConstraintParameters) )
-        except KeyError:
-          ConstraintDict[Res1][Name1] = [ (Name2, Res2, ConstraintParameters) ] 
-        try:
-          ConstraintDict[Res2][Name2].append( (Name1, Res1, ConstraintParameters) )
-        except KeyError:
-          ConstraintDict[Res2][Name2] = [ (Name1, Res1, ConstraintParameters) ]
-      
-
-      # potentially dangerous assumptions, :|
-      # elif Line.startswith('Angle'):
-      #   CstType, AngleCstName1, AngleCstRes1, AngleCstName2, AngleCstRes2, AngleCstName3, AngleCstRes3 = tuple( Line.split()[:7] )
-
-      #   ConstraintDict[Res1][Name1].append( )
-
-      # elif Line.startswith('Dihedral'):
-
-
-    return ConstraintDict
-
-  def reassemble_atompair_cst(self, Name1, Res1, Name2, Res2, ConstraintParameters):
-    return 'AtomPair %s %d %s %d %s'%(Name1, Res1, Name2, Res2, ' '.join(ConstraintParameters) )
-
-  def shift(self, Position):
-    return Position - self.NewPoseStartShift
-
-  def in_range(self, Position):
-    if Position < self.Range[0]:
-      return False
-    elif Position > self.Range[1]:
-      return False
-    else:
-      return True
-
-  def extrapolate_from_repeat_unit(self, StartArchetype, EndArchetype, RepeatUnitLength, NewPose):
-    ''' renumbers based on repeat unit pose '''
-    self.Range = (1, NewPose.n_residue())
-    self.NewPoseStartShift = StartArchetype - 1 # for 1 indexing
-    # Loop through positions in range of archetype
-    # To avoid double counting first only add constraints from archetype residues to 
-    # more C-terminal residues 
-    
-    # To hold extrapolated constraints
-    NewCsts = []
-    NewResNum = NewPose.n_residue()
-    UnitShiftMultiples = (NewResNum / RepeatUnitLength) + 1
-    UnitShiftList = [ RepeatUnitLength * Multiple for Multiple in range( UnitShiftMultiples+1 ) ] 
-    # print 'UnitShiftList', UnitShiftList
-
-    for ArchetypePosition in range(StartArchetype, EndArchetype+1):
-      try:
-        ArchetypePositionCstDict = self.CstDictionary[ArchetypePosition]
-      except:
-        continue
-      # print        
-      # print 'ArchetypePosition: ', ArchetypePosition
-      # print 'shifted: ', self.shift(ArchetypePosition)
-      # print 'ArchetypePositionCstDict: ', ArchetypePositionCstDict
-      
-      for AtomName in ArchetypePositionCstDict:
-        # print 'AtomName: ', AtomName
-        for Constraint in ArchetypePositionCstDict[AtomName]:
-          OtherName, OtherPosition, ConstraintParameters = Constraint
-          # print 'OtherPosition', OtherPosition
-          if OtherPosition > ArchetypePosition:
-            for UnitShift in UnitShiftList:
-              ShiftedArchetype = self.shift(ArchetypePosition) + UnitShift
-              ShiftedOther = self.shift(OtherPosition) + UnitShift
-              
-              if self.in_range(ShiftedArchetype) and self.in_range(ShiftedOther):
-                
-                # perhaps instead of removing these constraints, the residue should be changed. This would require cst and pose extrapolation to be intergrated
-                if NewPose.residue(ShiftedArchetype).has(AtomName) and NewPose.residue(ShiftedOther).has(OtherName):
-                  CST = self.reassemble_atompair_cst(AtomName, ShiftedArchetype, OtherName, ShiftedOther, ConstraintParameters)
-                  # print CST
-                  NewCsts.append(CST)
-    
-    # print ' debug exit '
-    # sys.exit()         
-    return NewCsts
-
-def pose_repeat_unit_finder(Pose, RepeatChains=False):
-  '''  '''
+def pose_repeat_unit_finder(Pose, RepeatChains=False, MinRepeats=3, DistanceTarget=4.7, DistanceFlex=0.5, AngleFlex=15.0):
+  ''' Default settings are for beta solenoids !!! 
+  for off roading give pose and '''
   if RepeatChains == False:
-    # Non-rosetta part, together these four lines finds primary sequence repeats to duplicate     
-    wDag = solenoid_tools.pose_wdag(Pose) # default settings are for beta solenoids !
+    # following lines find primary sequence repeats to duplicate
+    '''(self, Pose, MinRepeats=3, DistanceTarget=4.7, DistanceFlex=0.5, AngleFlex=15.0 )'''    
+    wDag = solenoid_tools.pose_wdag(Pose, MinRepeats, DistanceTarget, DistanceFlex, AngleFlex) 
     wDag.find_downstream_neighbors()
     RepeatChains = wDag.find_repeat_chains()
   # print 'RepeatChains', RepeatChains
-  
   # ConsolidatedRepeatStarts, TandemRepeats = solenoid_tools.consolidate_repeats(RepeatChains)
   # print 'ConsolidatedRepeatStarts, TandemRepeats'
   # print ConsolidatedRepeatStarts, TandemRepeats
@@ -328,25 +201,25 @@ def pose_repeat_unit_finder(Pose, RepeatChains=False):
   # sys.exit()
   # return ConsolidatedRepeatStarts, TandemRepeats, RepeatStretchesByLengthHash
 
-# sys.argv = [sys.argv[0], '-pdbs', '3ult.pdb', '-csts', '3ult_ON_All.cst', '-repeat', '6', '-max_turns_per_repeat', '3']
+sys.argv = [sys.argv[0], '-pdbs', '1m8n/1M8N.pdb', '3ult/3ult.pdb', '-repeat', '8', '-max_turns_per_repeat', '3', '-out', 'AllRepeats']
 
 def main(argv=None):
   if argv is None:
     argv = sys.argv
   
   ArgParser = argparse.ArgumentParser(description=' generate_backbones.py ( -help ) %s'%InfoString)
+  
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=str, nargs='+', help=' Input pdbs ', required=True)
-  ArgParser.add_argument('-csts', type=str, nargs='+', help=' Input cst files (MUST be provided in same order as input PDBS)', default=None)
 
   ArgParser.add_argument('-repeat', type=int, help=' Number of repeats to make ', default = 5)
-  ArgParser.add_argument('-max_turns_per_repeat', type=int, help=' Upper bound of number of turns per repeat unit to extrapolate repeat pose from. Lower bound always is 1 ', default=2)
+  ArgParser.add_argument('-max_turns_per_repeat', type=int, help=' Upper bound of number of turns (think number of unique repeat unit variations) per repeat unit to extrapolate repeat pose from. Lower bound always is 1.', default=2)
 
   ArgParser.add_argument('-min_overlap', type=int, help=' minimum residue overlap between superimposed regions ', default=4)
-  
-  ArgParser.add_argument('-man_repeat', type=str, help=' manual input of repeat chains (i.e. stripes of residues along pdb), _ seperates residues in chain, __ seperates chains ', default=False)
-  # ArgParser.add_argument('-start', type=int, help=' Repeat start residue ', default=False)  
-  # ArgParser.add_argument('-end', type=str, help=' input pdbs ', required=True)
+  ArgParser.add_argument('-repeat_residues', type=str, help=' manual input of repeat chains (i.e. stripes of residues along pdb), _ seperates residues in chain, __ seperates chains ', default=False)
+
+  #### ArgParser.add_argument('-start', type=int, help=' Repeat start residue ', default=False)  
+  #### ArgParser.add_argument('-end', type=str, help=' input pdbs ', default=False)
 
   ArgParser.add_argument('-out', type=str, help=' Output directory ', default='./')
 
@@ -354,37 +227,27 @@ def main(argv=None):
   # print 'Args.pdbs', Args.pdbs
   if len(Args.pdbs) == 1:
     Args.pdbs = [''.join(Args.pdbs)]
-  if Args.csts:
-    if len(Args.csts[0]) == 1:
-      Args.csts = [''.join(Args.csts)]
 
   if Args.out [-1] != '/':
     Args.out = Args.out + '/'
-
-  # print 'Args.pdbs', Args.pdbs
   
-  ### extrapolate from input cst to new extended backbones
-
+  ### find units in input pdb and extrapolate repeat backbones
   for i, Pdb in enumerate(Args.pdbs):
     print 'Pdb:', Pdb
-    # load Pdb
+    # get name base for output pdbs 
+    InputPdbStem = Pdb.split('/')[-1].replace('.pdb', '')
+    print 'StemName:', InputPdbStem
+
+    # load Pdb into rosetta pose
     Pose = rosetta.pose_from_pdb(Pdb)
     Pose.pdb_info(rosetta.core.pose.PDBInfo( Pose ))
-    # get name base for output pdbs 
-    InputPdbStem = Pdb.replace('.pdb', '')
     
-    # get cst file if csts files
-    if Args.csts:
-      Cst = Args.csts[i]
-      print 'Cst:', Cst
-      Constrainer = constraint_extrapolator(Cst)
-
     # Get repeat unit poses from function above
-    if Args.man_repeat == False:
+    if Args.repeat_residues == False:
       TandemRepeats, RepeatStretchesByLengthHash = pose_repeat_unit_finder(Pose)
     
     else:
-      RepeatChains = Args.man_repeat.split('__')
+      RepeatChains = Args.repeat_residues.split('__')
       RepeatChains = [ [ int(Number) for Number in Chain.split('_') ] for Chain in RepeatChains]
       # print 'RepeatChains', RepeatChains
       # sys.exit()
@@ -395,7 +258,6 @@ def main(argv=None):
     # print 'ConsolidatedRepeatStarts', ConsolidatedRepeatStarts
     # print 'RepeatStretchesByLengthHash', RepeatStretchesByLengthHash
     # print 'TandemRepeats', TandemRepeats
-
     # InputPoseRepeatNumber = len(TandemRepeats[ConsolidatedRepeatStarts[0]])
 
     AllExtrapolationsByRepeatLength = {}
@@ -469,45 +331,38 @@ def main(argv=None):
 
                 # hacky check finds things that went wrong in extrapolation, sometimes
                 if Extrapolation.n_residue() == ModUniformLength + Overlap:
-                  # print 'pass'
-                  # print 'ModUniformLength2', ModUniformLength
-                  # print 'Extrapolation', Extrapolation
-                  
+
                   # trim down to uniform length 
                   Extrapolation = grafting.return_region(Extrapolation, 1, ModUniformLength)
-                  # Extrapolation = grafting.return_region(Extrapolation, 1, UniformLength)
-
-                  # if cst provided with pdb, extrapolate constraints to corrspond to new backbone
-                  if Args.csts:
-                    ExtrapolatedCst = '\n'.join(Constrainer.extrapolate_from_repeat_unit(ModRep1Start, ModRep2End, ModLength, Extrapolation))
 
                   # add extrapolated pose to list
                   Repeat1Range = (ModRep1Start, ModRep1End)
                   Repeat2Range = (ModRep2Start, ModRep2End)
-                  ExtrapolationList.append(( Extrapolation, ExtrapolatedCst, Repeat1Range, Repeat2Range, NumTurns ))
+                  ExtrapolationList.append(( Extrapolation, Repeat1Range, Repeat2Range, NumTurns ))
 
                 else:
                   print 'fail'
 
-
       AllExtrapolationsByRepeatLength[RepeatUnitLength] = ExtrapolationList
 
-    # return (AllExtrapolationsByRepeatLength, Args)
 
     with open('%s_RepExtra.log'%InputPdbStem, 'w') as LogFile:
+
       for BaseUnitLength in AllExtrapolationsByRepeatLength:
         print 'Extrapolated %d poses with base unit length %d'%(len(AllExtrapolationsByRepeatLength[BaseUnitLength]), BaseUnitLength)
         print>>LogFile, 'Extrapolated %d poses with base unit length %d'%(len(AllExtrapolationsByRepeatLength[BaseUnitLength]), BaseUnitLength)
         print>>LogFile, 'Number\tUnit1 range\tUnit2 range'
+
         for i, ExtrapolationTuple in enumerate( AllExtrapolationsByRepeatLength[BaseUnitLength] ):
-          # print Extrapolation
-          print>>LogFile, '\t\t'.join([ str(i+1), ','.join([str(Number) for Number in ExtrapolationTuple[2]]), ','.join([str(Number) for Number in ExtrapolationTuple[3]]) ])
-          RepeatUnitLength = BaseUnitLength * ExtrapolationTuple[4]
-          rosetta.dump_pdb( ExtrapolationTuple[0], '%s%s_rep%dextra%d.pdb'%(Args.out, InputPdbStem, RepeatUnitLength, i+1) )
-          with open( '%s%s_rep%dextra%d.cst'%(Args.out, InputPdbStem, RepeatUnitLength, i+1), 'w' ) as CstFile:
-            print>>CstFile, ExtrapolationTuple[1]
+          ### print Extrapolation
+          ### print>>LogFile, '\t\t'.join([ str(i+1), ','.join([str(Number) for Number in ExtrapolationTuple[1]]), ','.join([str(Number) for Number in ExtrapolationTuple[2]]) ])
+          Repeat1Range = ExtrapolationTuple[1]
+          Repeat2Range = ExtrapolationTuple[2]
+          
+          RepeatUnitLength = BaseUnitLength * ExtrapolationTuple[3]
+          rosetta.dump_pdb( ExtrapolationTuple[0], '%ssrc%d_%d__%d_%d_rep%d_%s.pdb'%(Args.out, Repeat1Range[0], Repeat1Range[0], Repeat2Range[1], Repeat2Range[1], RepeatUnitLength, InputPdbStem) )
 
-# getBluePrintFromCoords.pl -pdbfile 3ult_rep15extra50.pdb > 3ult_rep15extra50.bp
 
-if __name__ == "__main__":
-  sys.exit(main())
+# if __name__ == "__main__":
+#   sys.exit(main())
+
