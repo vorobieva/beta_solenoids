@@ -3,7 +3,7 @@ InfoString = '''
 
 '''
 
-'''
+# '''
 # from repo 
 import solenoid_tools
 
@@ -515,9 +515,8 @@ def main(argv=None):
   Pdbs = glob.glob( '*%s*.pdb'%Args.repeat_pdb_tag ) 
   assert len(Pdbs), r"No pdbs found with glob: \n %s \n '* % s *.pdb' % Args.repeat_pdb_tag "%Args.repeat_pdb_tag
   
-  # print 'Pdbs', Pdbs
   for Pdb in Pdbs:
-
+    ## For debug put pdb of interest here:
     # if Pdb == 'src15_38__22_45_rep24_1EZG.pdb':
 
     print 'Pdb:', Pdb 
@@ -540,13 +539,6 @@ def main(argv=None):
     CstName = (Pdb+'!').replace('.pdb!', '.cst')
     ExtrapolatedConstraints = Constrainer.extrapolate_from_repeat_unit(SourceRanges[0][0], SourceRanges[0][1], RepeatLength, Pose, CstName)
     
-    # print Pdb
-    # return ExtrapolatedConstraints
-    # sys.exit()
 
-
-    # print 'ExtrapolatedConstraints', ExtrapolatedConstraints
-  # return Constrainer
-
-# if __name__ == "__main__":
-#   sys.exit(main())
+if __name__ == "__main__":
+  sys.exit(main())
