@@ -4,9 +4,6 @@ InfoString = '''
 '''
 
 # '''
-# from repo 
-import solenoid_tools
-
 # libraries
 # from scipy import spatial
 # import itertools
@@ -19,14 +16,13 @@ import sys
 import os
 import re
 
-import rosetta
-# rosetta.init()
-
+if '-h' not in sys.argv:
+  import rosetta
+  rosetta.init()
+  # from beta_solenoids repo 
+  import solenoid_tools
 ## debug
 # rosetta.init(extra_options = "-out:level 1000")
-
-## normal
-rosetta.init()
 
 ## runtime
 # rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
@@ -34,11 +30,10 @@ from rosetta.protocols import grafting
 from rosetta.utility import ostream
 
 # ''' 
-sys.argv = [sys.argv[0], '-repeat_pdb_tag', '_1EZG', '-reference_pdb', '1EZG.pdb', '-reference_cst', '1EZG_ON_All.cst']
+# sys.argv = [sys.argv[0], '-repeat_pdb_tag', '_1EZG', '-reference_pdb', '1EZG.pdb', '-reference_cst', '1EZG_ON_All.cst']
 
 class constraint_extrapolator:
   """ constraint extrapolator """
-
   def __init__(self, CstFilename):
     '''
     Makes hash: self.Cst[Residue] = { AtomName: (AllAtomResiduePairs, ConstraintParameters, LineNumber) }  '''
@@ -229,7 +224,7 @@ class constraint_extrapolator:
     # AtomResidueCoords = [ UpEdge ] 
 
 
-  def extrapolate_from_repeat_unit(self, ReferenceStart, ReferenceEnd, RepeatUnitLength, NewPose, FinalCstName):
+  def extrapolate_from_repeat_unit(self, ReferenceStart, ReferenceEnd, RepeatUnitLength, NewPose, FinalCstName, PdbTag):
     ''' renumbers based on repeat unit pose '''
 
     # Loop through positions in range of archetype
@@ -244,10 +239,10 @@ class constraint_extrapolator:
     
     Edge1Cst, Edge2Cst, BothEdgeCst, MiddleCst = self.shift_and_sort_constraints(ReferenceStart, ReferenceEnd, RepeatUnitLength)
     
-    self.output_cst(Edge1Cst, 'Edge1.cst')
-    self.output_cst(Edge2Cst, 'Edge2.cst')
-    self.output_cst(BothEdgeCst, 'BothEdgeCst.cst')
-    self.output_cst(MiddleCst, 'Middle.cst')
+    # self.output_cst(Edge1Cst, 'Edge1.cst')
+    # self.output_cst(Edge2Cst, 'Edge2.cst')
+    # self.output_cst(BothEdgeCst, 'BothEdgeCst.cst')
+    # self.output_cst(MiddleCst, 'Middle.cst')
     # print 'Edge1Cst:', Edge1Cst, '\n'
     # print 'Edge2Cst:', Edge2Cst, '\n'
     # print 'BothEdgeCst:', BothEdgeCst, '\n'
@@ -309,10 +304,10 @@ class constraint_extrapolator:
 
     # RepPose.constraint_set().show_definition(ostream(sys.stdout), RepPose )
 
-    self.output_cst(MiddleRepeatCstList, 'MidRep.cst')
-    self.output_cst(Edge1RepeatCstList, 'Edge1Rep.cst')
-    self.output_cst(Edge2RepeatCstList, 'Edge2Rep.cst')
-    self.output_cst(BothEdgeRepeatCstList, 'BothEdgeRep.cst')
+    self.output_cst(MiddleRepeatCstList, '%s_MidRepTemp.cst'%PdbTag)
+    self.output_cst(Edge1RepeatCstList, '%s_Edge1RepTemp.cst'%PdbTag)
+    self.output_cst(Edge2RepeatCstList, '%s_Edge2RepTemp.cst'%PdbTag)
+    self.output_cst(BothEdgeRepeatCstList, '%s_BothEdgeRepTemp.cst'%PdbTag)
     
     AllRepeatCst = Edge1RepeatCstList[:]
     AllRepeatCst.extend(Edge1RepeatCstList)
@@ -337,9 +332,9 @@ class constraint_extrapolator:
     NumberBothEdgeRepeatCst = len(BothEdgeRepeatCstList)
 
     NumberAllRepeatCst = len(AllRepeatCst)
+    
     # # All default talaris 2013 non zero weights set to zero
     CstScoreFunction = set_all_weights_zero( rosetta.getScoreFunction() )
-
     # # turning on constraint weights
     CstScoreFunction.set_weight( rosetta.atom_pair_constraint, 1.0 )
     CstScoreFunction.set_weight( rosetta.angle_constraint, 1.0 )
@@ -347,63 +342,64 @@ class constraint_extrapolator:
 
     print 'MiddlePose should have %d constraints !!! '%NumberMiddleRepeatCst 
     MiddlePose = NewPose.clone()
-    ConstraintSetter = rosetta.ConstraintSetMover()
-    ConstraintSetter.constraint_file('MidRep.cst')  
-    ConstraintSetter.apply(MiddlePose) 
-    # return ConstraintSetter
-    # return MiddlePose
-    CstScoreFunction.show(MiddlePose)
-    # MiddlePose.constraint_set().show_definition(ostream(sys.stdout), MiddlePose )
-    print
+    if NumberEdge1RepeatCst:
+      ConstraintSetter = rosetta.ConstraintSetMover()
+      ConstraintSetter.constraint_file('%s_MidRepTemp.cst'%PdbTag) 
+      ConstraintSetter.apply(MiddlePose) 
+      # return ConstraintSetter
+      # return MiddlePose
+      CstScoreFunction.show(MiddlePose)
+      # MiddlePose.constraint_set().show_definition(ostream(sys.stdout), MiddlePose )
+      print
 
     print 'Edge1Pose should have %d constraints !!! '%NumberEdge1RepeatCst   
     Edge1Pose = NewPose.clone()
-    ConstraintSetter = rosetta.ConstraintSetMover()
-    ConstraintSetter.constraint_file('Edge1Rep.cst')  
-    ConstraintSetter.apply(Edge1Pose) 
-    CstScoreFunction.show(Edge1Pose)
     if NumberEdge1RepeatCst:
+      ConstraintSetter = rosetta.ConstraintSetMover()
+      ConstraintSetter.constraint_file('%s_Edge1RepTemp.cst'%PdbTag) 
+      ConstraintSetter.apply(Edge1Pose) 
+      CstScoreFunction.show(Edge1Pose)
       Edge1Score = CstScoreFunction(Edge1Pose)
       Edge1ScoreNorm = Edge1Score / NumberEdge1RepeatCst
-    # Edge1Pose.constraint_set().show_definition(ostream(sys.stdout), Edge1Pose )
-    print
+      # Edge1Pose.constraint_set().show_definition(ostream(sys.stdout), Edge1Pose )
+      print
 
     print 'Edge2Pose should have %d constraints !!! '%NumberEdge2RepeatCst   
     Edge2Pose = NewPose.clone()
-    ConstraintSetter = rosetta.ConstraintSetMover()
-    ConstraintSetter.constraint_file('Edge2Rep.cst')  
-    ConstraintSetter.apply(Edge2Pose) 
-    CstScoreFunction.show(Edge2Pose)
     if NumberEdge2RepeatCst:
+      ConstraintSetter = rosetta.ConstraintSetMover()
+      ConstraintSetter.constraint_file('%s_Edge2RepTemp.cst'%PdbTag) 
+      ConstraintSetter.apply(Edge2Pose) 
+      CstScoreFunction.show(Edge2Pose)
       Edge2Score = CstScoreFunction(Edge2Pose)
       Edge2ScoreNorm = Edge2Score / NumberEdge2RepeatCst
-    # Edge2Pose.constraint_set().show_definition(ostream(sys.stdout), Edge2Pose )
-    print 
+      # Edge2Pose.constraint_set().show_definition(ostream(sys.stdout), Edge2Pose )
+      print 
     
-    print 'BothEdgePose should have %d constraints !!! '%NumberBothEdgeRepeatCst   
-    BothEdgePose = NewPose.clone()
-    ConstraintSetter = rosetta.ConstraintSetMover()
-    ConstraintSetter.constraint_file('AllRepeatCst.cst')  
-    ConstraintSetter.apply(BothEdgePose) 
-    CstScoreFunction.show(BothEdgePose)
-    if NumberBothEdgeRepeatCst:
-      BothEdgeScore = CstScoreFunction(BothEdgePose)
-      BothEdgeScoreNorm = BothEdgeScore / NumberBothEdgeRepeatCst
-    # BothEdgePose.constraint_set().show_definition(ostream(sys.stdout), BothEdgePose )
-    print 
+    # print 'BothEdgePose should have %d constraints !!! '%NumberBothEdgeRepeatCst   
+    # BothEdgePose = NewPose.clone()
+    # if NumberBothEdgeRepeatCst:
+    #   ConstraintSetter = rosetta.ConstraintSetMover()
+    #   ConstraintSetter.constraint_file('%s_AllRepeatCstTemp.cst'%PdbTag) 
+    #   ConstraintSetter.apply(BothEdgePose) 
+    #   CstScoreFunction.show(BothEdgePose)
+    #   BothEdgeScore = CstScoreFunction(BothEdgePose)
+    #   BothEdgeScoreNorm = BothEdgeScore / NumberBothEdgeRepeatCst
+    #   # BothEdgePose.constraint_set().show_definition(ostream(sys.stdout), BothEdgePose )
+    #   print 
 
-    print 'AllCstPose should have %d constraints !!! '%NumberAllRepeatCst   
-    AllCstPose = NewPose.clone()
-    ConstraintSetter = rosetta.ConstraintSetMover()
-    ConstraintSetter.constraint_file('AllRepeatCst.cst')  
-    ConstraintSetter.apply(AllCstPose) 
-    CstScoreFunction.show(AllCstPose)
-    # AllCstPose.constraint_set().show_definition(ostream(sys.stdout), AllCstPose )
-    print 
+    # print 'AllCstPose should have %d constraints !!! '%NumberAllRepeatCst   
+    # AllCstPose = NewPose.clone()
+    # ConstraintSetter = rosetta.ConstraintSetMover()
+    # ConstraintSetter.constraint_file('%s_AllRepeatCstTemp.cst'%PdbTag) 
+    # ConstraintSetter.apply(AllCstPose) 
+    # CstScoreFunction.show(AllCstPose)
+    # # AllCstPose.constraint_set().show_definition(ostream(sys.stdout), AllCstPose )
+    # print 
 
     CuratedRepeatCst = MiddleRepeatCstList[:]
     ## whether these should be included or not is up in the air!!
-    # CuratedRepeatCst.extend(BothEdgeRepeatCstList)
+    CuratedRepeatCst.extend(BothEdgeRepeatCstList)
 
     if NumberEdge1RepeatCst and NumberEdge2RepeatCst:
       if Edge1ScoreNorm <= Edge2ScoreNorm:
@@ -419,6 +415,20 @@ class constraint_extrapolator:
     # CuratedRepeatCst
     # print 'Edge1ScoreNorm, Edge2ScoreNorm', Edge1ScoreNorm, Edge2ScoreNorm
     self.output_cst(CuratedRepeatCst, FinalCstName)
+
+    AllWithEdge1RepeatCst = MiddleRepeatCstList[:]
+    ## whether these should be included or not is up in the air!!
+    # AllWithEdge1RepeatCst.extend(BothEdgeRepeatCstList)
+    AllWithEdge1RepeatCst.extend(Edge1RepeatCstList)
+
+    AllWithEdge2RepeatCst = MiddleRepeatCstList[:]
+    ## whether these should be included or not is up in the air!!
+    # AllWithEdge2RepeatCst.extend(BothEdgeRepeatCstList)
+    AllWithEdge2RepeatCst.extend(Edge2RepeatCstList)
+
+    ModFinalCstName = (FinalCstName+'!').replace('.cst!', '')
+    self.output_cst(AllWithEdge1RepeatCst, ModFinalCstName+'_e1.cst')
+    self.output_cst(AllWithEdge2RepeatCst, ModFinalCstName+'_e2.cst')
 
 
 def pose_has(Pose, AtomResidueCoords):
@@ -535,9 +545,9 @@ def main(argv=None):
     print
     
     # print [Pdb]
-
-    CstName = (Pdb+'!').replace('.pdb!', '.cst')
-    ExtrapolatedConstraints = Constrainer.extrapolate_from_repeat_unit(SourceRanges[0][0], SourceRanges[0][1], RepeatLength, Pose, CstName)
+    PdbTag = (Pdb+'!').replace('.pdb!', '').replace('!', '')
+    CstName = PdbTag+'.cst'
+    ExtrapolatedConstraints = Constrainer.extrapolate_from_repeat_unit(SourceRanges[0][0], SourceRanges[0][1], RepeatLength, Pose, CstName, PdbTag)
     
 
 if __name__ == "__main__":

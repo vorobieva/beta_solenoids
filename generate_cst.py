@@ -315,16 +315,16 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                 DownNeighbor2Vec = PDB.Vector(DownNeighbor2Tuple[3])
 
                 Angle1 = PDB.calc_angle(UpNeighbor1Vec, UpstreamVec, DownstreamVec)
-                AngleCst1 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Angle1 )
+                AngleCst1 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 0.5' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Angle1 )
                 Angle2 = PDB.calc_angle(UpstreamVec, DownstreamVec, DownNeighbor1Vec)
-                AngleCst2 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Angle2 )
+                AngleCst2 = 'Angle %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 0.5' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Angle2 )
 
                 Torsion1 = PDB.calc_dihedral(UpNeighbor2Vec, UpNeighbor1Vec, UpstreamVec, DownstreamVec)
-                TorsionCst1 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpNeighbor2Tuple[1], UpNeighbor2Tuple[2], UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Torsion1 )
+                TorsionCst1 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 0.5' %( UpNeighbor2Tuple[1], UpNeighbor2Tuple[2], UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, SasaBasedWeight, Torsion1 )
                 Torsion2 = PDB.calc_dihedral(UpNeighbor1Vec, UpstreamVec, DownstreamVec, DownNeighbor1Vec)
-                TorsionCst2 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Torsion2 )
+                TorsionCst2 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 0.5' %( UpNeighbor1Tuple[1], UpNeighbor1Tuple[2], UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], SasaBasedWeight, Torsion2 )
                 Torsion3 = PDB.calc_dihedral(UpstreamVec, DownstreamVec, DownNeighbor1Vec, DownNeighbor2Vec)
-                TorsionCst3 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 10.0' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], DownNeighbor2Tuple[1], DownNeighbor2Tuple[2], SasaBasedWeight, Torsion3 )
+                TorsionCst3 = 'Dihedral %s %d %s %d %s %d %s %d SCALARWEIGHTEDFUNC %f CIRCULARHARMONIC %.2f 0.5' %( UpName, UpRes, DownName, DownRes, DownNeighbor1Tuple[1], DownNeighbor1Tuple[2], DownNeighbor2Tuple[1], DownNeighbor2Tuple[2], SasaBasedWeight, Torsion3 )
 
                 # adds constraint to running lists of constraints
                 Constraints.extend( [DistanceCst, AngleCst1, AngleCst2, TorsionCst1, TorsionCst2, TorsionCst3] )
@@ -352,7 +352,7 @@ def main(argv=None):
   
   ArgParser = argparse.ArgumentParser(description=' nc_cst_gen.py arguments ( -help ) %s'%InfoString)
   # Required arguments:
-  ArgParser.add_argument('-pdbs', type=list, help=' input pdbs ', required=True)
+  ArgParser.add_argument('-pdbs', type=str, nargs='+', help=' input pdbs ', required=True)
   # Optional arguments:
   ArgParser.add_argument('-out', type=str, help=' output directory ', default='./')
   ArgParser.add_argument('-max_dist', type=float, default=3.4, help=' distance between the oxygens and downstreams ')
@@ -368,8 +368,8 @@ def main(argv=None):
   ArgParser.add_argument('-renumber_pose', type=bool, default=True, help='True|False renumber pdb residues ' )
   Args = ArgParser.parse_args()
   
-  if len(Args.pdbs[0]) == 1:
-    Args.pdbs = [''.join(Args.pdbs)]
+  # if len(Args.pdbs[0]) == 1:
+  #   Args.pdbs = [''.join(Args.pdbs)]
 
   if Args.out [-1] != '/':
     Args.out = Args.out + '/'
