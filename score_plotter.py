@@ -2,6 +2,10 @@
 InfoString = ''' 
 Contains light wrapper object for plotly to track design trajectories '''
 
+import numpy as np
+import re
+import sys
+
 class tracker:
   def __init__(self, InputScoreFxnList=[], FxnNames=[]):
     ''' Track scores of design trajectories for plotly plots '''
@@ -10,7 +14,7 @@ class tracker:
     self.ApiKey = "cc5z4a8kst"
 
     import plotly.graph_objs as Graph
-    # self.Graph = Graph
+    self.Graph = Graph
 
     self.Iterations = []
     self.ScoreFxns = InputScoreFxnList
@@ -43,11 +47,11 @@ class tracker:
       self.Iterations.append(UserDefIteration)
 
     for i, Fxn in enumerate(self.ScoreFxns):
-      Score = Fxn(Score)
+      Score = Fxn(Pose)
       self.Scores[i].append(Score)
 
 
-  def plot_traces(PlotName, ScoreTraces):
+  def plot_traces(self, PlotName, ScoreTraces):
     ''' Plot premade plotly traces. Used within plot_scores, but 
     can also be used on larger collection of traces '''
     # Import plotly for ploting 
@@ -56,7 +60,7 @@ class tracker:
     # Sign in with class login info. Change in def __init__ above
     py.sign_in( self.User, self.ApiKey )
 
-    PlotlyData = Graph.Data(ScoreTraces)
+    PlotlyData = self.Graph.Data(ScoreTraces)
     plot_url = py.plot(PlotlyData, filename=PlotName)
 
 
@@ -76,7 +80,7 @@ class tracker:
     for i in range(len( self.ScoreFxns )):
       Name = self.FxnNames[i]
       # Y coordinates are score fxn scores
-      FxnTrace = Graph.Scatter(
+      FxnTrace = self.Graph.Scatter(
         x = Xaxis,
         y = self.Scores[i],
         name=PartialName%self.FxnNames[i],
