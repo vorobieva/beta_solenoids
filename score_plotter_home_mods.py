@@ -48,7 +48,7 @@ class tracker:
       self.Iterations.append(UserDefIteration)
 
     for i, Fxn in enumerate(self.ScoreFxns):
-      Score = Fxn(Pose)
+      Score = Fxn(Score)
       self.Scores[i].append(Score)
 
       if self.ComparePose != None:
@@ -64,7 +64,7 @@ class tracker:
     # Sign in with class login info. Change in def __init__ above
     py.sign_in( self.User, self.ApiKey )
 
-    PlotlyData = self.Graph.Data(ScoreTraces)
+    PlotlyData = Graph.Data(ScoreTraces)
     plot_url = py.plot(PlotlyData, filename=PlotName)
 
 
@@ -84,19 +84,21 @@ class tracker:
     for i in range(len( self.ScoreFxns )):
       Name = self.FxnNames[i]
       # Y coordinates are score fxn scores
-      FxnTrace = self.Graph.Scatter(
-      x = Xaxis,
-      y = self.Scores[i],
-      name=PartialName%self.FxnNames[i],
-      mode='lines+markers' )
+      FxnTrace = Graph.Scatter(
+        x = Xaxis,
+        y = self.Scores[i],
+        name=PartialName%self.FxnNames[i],
+        mode='lines+markers'
+        )
       ScoreTraces.append(FxnTrace)
 
       if self.ComparePose:
         CompareTrace = Graph.Scatter(
-        x = Xaxis,
-        y = self.CompareScores[i],
-        name = self.CompareName+'_'+self.FxnNames[i],
-        mode ='lines' )
+          x = Xaxis,
+          y = self.CompareScores[i],
+          name = self.CompareName+'_'+self.FxnNames[i],
+          mode ='lines'
+          )
         ScoreTraces.append(CompareTrace)
 
     if GrabDontPlot:
