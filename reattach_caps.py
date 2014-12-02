@@ -12,11 +12,11 @@ import solenoid_tools
 
 from generate_backbones import fuse
 
-# external
-# libraries
+### external
+### libraries
 #
 # from scipy import spatial
-# import itertools
+
 import numpy as np
 import subprocess
 import argparse

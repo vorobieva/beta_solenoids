@@ -366,6 +366,9 @@ def main(argv=None):
   ArgParser.add_argument('-max_sasa_weight',  type=float, default=0.1,  help=' weight of ceiling for downstream oxygen contacts ')
   ArgParser.add_argument('-sasa_probe_radius', type=float, default=0.8,  help=' probe radius for sasa calculations ')
   ArgParser.add_argument('-renumber_pose', type=bool, default=True, help='True|False renumber pdb residues ' )
+  
+  ArgParser.add_argument('-disulfide', type=bool, default=True, help='True|False include disulfide constraints ' )  
+
   Args = ArgParser.parse_args()
   
   # if len(Args.pdbs[0]) == 1:
@@ -398,6 +401,12 @@ def main(argv=None):
 
     AllConstraints, SortedConstraints = get_pose_constraints(Pose, Args.max_dist, Args.min_seq_sep, Args.sasa_probe_radius, SasaScale, Args.upstream_atom, Args.downstream_atom)
     
+    if Args.disulfide:
+      DisulfAllConstraints, DisulfSortedConstraints = get_pose_constraints(Pose, 2.3, 2, Args.sasa_probe_radius, SasaScale, 'SG', 'SG')
+
+    print DisulfAllConstraints, DisulfSortedConstraints
+    sys.exit()
+
     CstName = OutputPdb.replace('.pdb', '_All.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(AllConstraints) 

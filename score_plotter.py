@@ -2,15 +2,18 @@
 InfoString = ''' 
 Contains light wrapper object for plotly to track design trajectories '''
 
+import numpy as np
+import re 
+
 class tracker:
-  def __init__(self, InputScoreFxnList=[], FxnNames=[], ComparePose=None):
+  def __init__(self, InputScoreFxnList=[], FxnNames=[], CompareToPose=None, PerResidue=True):
     ''' Track scores of design trajectories for plotly plots '''
 
     self.User = "pylesharley"
     self.ApiKey = "cc5z4a8kst"
 
     import plotly.graph_objs as Graph
-    # self.Graph = Graph
+    self.Graph = Graph
 
     self.Iterations = []
     self.ScoreFxns = InputScoreFxnList
@@ -18,13 +21,14 @@ class tracker:
     self.Scores = [ [] for Fxn in self.ScoreFxns ]
     self.Notes = [ [] for Fxn in self.ScoreFxns ]
 
-    self.ComparePose = ComparePose
+    self.ComparePose = CompareToPose
     if self.ComparePose != None:
       self.CompareScores = [ [] for Fxn in self.ScoreFxns ]
       self.CompareName = re.sub( r'^(.*)\.pdb$', r'\1', self.ComparePose.pdb_info().name() )
 
     assert len(self.ScoreFxns) == len(self.FxnNames)
 
+    self.PerRes = PerResidue
 
   def add_fxn(self, OtherScoreFxn, FxnNames):
     ''' add addional score functions
@@ -48,14 +52,19 @@ class tracker:
       self.Iterations.append(UserDefIteration)
 
     for i, Fxn in enumerate(self.ScoreFxns):
-      Score = Fxn(Pose)
-      self.Scores[i].append(Score)
+      if self.PerRes:
+        self.Scores[i].append( Fxn(Pose) / Pose.n_residue() )
+      else:
+        self.Scores[i].append(Fxn(Pose))
 
       if self.ComparePose != None:
-        self.CompareScores[i].append()
+        if self.PerRes:
+          self.CompareScores[i].append( Fxn(self.ComparePose) / self.ComparePose.n_residue() )
+        else:
+          self.CompareScores[i].append( Fxn(self.ComparePose) )
 
 
-  def plot_traces(PlotName, ScoreTraces):
+  def plot_traces(self, PlotName, ScoreTraces):
     ''' Plot premade plotly traces. Used within plot_scores, but 
     can also be used on larger collection of traces '''
     # Import plotly for ploting 
@@ -92,7 +101,7 @@ class tracker:
       ScoreTraces.append(FxnTrace)
 
       if self.ComparePose:
-        CompareTrace = Graph.Scatter(
+        CompareTrace = self.Graph.Scatter(
         x = Xaxis,
         y = self.CompareScores[i],
         name = self.CompareName+'_'+self.FxnNames[i],
