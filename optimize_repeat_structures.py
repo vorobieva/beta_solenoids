@@ -236,16 +236,16 @@ def optimize_repeat_pdb( (Pdb, CstSets, RepeatLength, NativePdb) ):
       Trekker.score(TalCstRelaxPose)
       print 'Postrelax, weighted atom pairs at %f '%RelativeWeight
       TalarisPlusCst.show(TalCstRelaxPose)
-      rosetta.dump_pdb( TalCstRelaxPose, CstStemName+'_TalCst%f.pdb'%RelativeWeight )
+      rosetta.dump_pdb( TalCstRelaxPose, CstStemName+'_TalCst%.3f.pdb'%RelativeWeight )
 
       TalCstRelaxPose.remove_constraints()
       SetupNCS.apply(TalCstRelaxPose)
 
       rosetta.relax_pose(TalCstRelaxPose, SymmTalaris, 'tag')
       Trekker.score(TalCstRelaxPose)
-      rosetta.dump_pdb( TalCstRelaxPose, CstStemName+'_TalCst%f_Relax.pdb'%RelativeWeight )
+      rosetta.dump_pdb( TalCstRelaxPose, CstStemName+'_TalCst%.3f_Relax.pdb'%RelativeWeight )
 
-      AllCstTraces.extend( Trekker.plot_scores('', 'TalCst'+CstStemName, True) )
+      AllCstTraces.extend( Trekker.plot_scores('', 'TalCst'+CstStemName+'_%.3f'%RelativeWeight, True) )
 
     # TalarisPlusCst
 

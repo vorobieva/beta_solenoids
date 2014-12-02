@@ -10,7 +10,7 @@ This script is to generate ATOMPAIR constraints for Rosetta,
 '''
 
 # uncomment just next line and copy block in multiline string for ipython mode
-# '''
+'''
 
 
 from multiprocessing import Process
@@ -28,7 +28,9 @@ if '-h' not in sys.argv:
   import rosetta
   rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
 
-# ''', #sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
+# '''
+
+sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 
 ThreeToOne = {'GLY':'G','ALA':'A','VAL':'V','LEU':'L','ILE':'I','MET':'M','PRO':'P','PHE':'F','TRP':'W','SER':'S','THR':'T','ASN':'N','GLN':'Q','TYR':'Y','CYS':'C','CYD':'C','LYS':'K','ARG':'R','HIS':'H','ASP':'D','GLU':'E','STO':'*','UNK':'U'}
 ChainAlphabetIndices = {'A':1, 'B':2, 'C':3, 'D':4, 'E':5, 'F':6, 'G':7, 'H':8, 'I':9, 'J':10, 'K':11, 'L':12, 'M':13, 'N':14, 'O':15, 'P':16, 'Q':17, 'R':18, 'S':19, 'T':20, 'U':21, 'V':22, 'W':23, 'X':24, 'Y':25, 'Z':26 }
@@ -57,7 +59,7 @@ class sasa_scale:
       return (self.WeightRangeMag * Proportion) + self.FloorWeight
 
 
-def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaScale, UpstreamGrep, DownstreamGrep):
+def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaScale, UpstreamGrep, DownstreamGrep, NeedHydrogen=True):
     '''  '''
     # AlexsSasaCalculator is from Alex's interface_fragment_matching 
     # thanks Alex!
@@ -170,7 +172,7 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                 # print 'UpH_Name', UpH_Name
                 if 'H' in UpH_Name:
                   UpstreamHydrogens.append((UpH_Res, UpH_Atm, UpH_Name))
-              # print 'UpstreamHydrogens', UpstreamHydrogens
+                # print 'UpstreamHydrogens', UpstreamHydrogens
 
               PotentialDownstreamHydrogens = ResidueAtomHydrogens[DownIndex]
               DownstreamHydrogens = []
@@ -181,10 +183,10 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
                 # print 'DownH_Name', DownH_Name
                 if 'H' in DownH_Name:
                   DownstreamHydrogens.append((DownH_Res, DownH_Atm, DownH_Name))
-              # print 'DownstreamHydrogens', DownstreamHydrogens
+                # print 'DownstreamHydrogens', DownstreamHydrogens
 
               # check their is at least one hydrogen in system before adding constraint
-              if len(UpstreamHydrogens) or len(DownstreamHydrogens):
+              if len(UpstreamHydrogens) or len(DownstreamHydrogens) or NeedHydrogen == False:
 
                 # these trys / excepts seperate 
                 # backbone-backbone from 
@@ -399,11 +401,14 @@ def main(argv=None):
     else:
       rosetta.dump_pdb(Pose, OutputPdb.replace('.pdb', '_renumbered.pdb'))
 
-    AllConstraints, SortedConstraints = get_pose_constraints(Pose, Args.max_dist, Args.min_seq_sep, Args.sasa_probe_radius, SasaScale, Args.upstream_atom, Args.downstream_atom)
+    AllConstraints, SortedConstraints = get_pose_constraints(Pose, Args.max_dist, Args.min_seq_sep, Args.sasa_probe_radius, SasaScale, Args.upstream_atom, Args.downstream_atom, True)
     
     if Args.disulfide:
-      DisulfAllConstraints, DisulfSortedConstraints = get_pose_constraints(Pose, 2.3, 2, Args.sasa_probe_radius, SasaScale, 'SG', 'SG')
+      DisulfAllConstraints, DisulfSortedConstraints = get_pose_constraints(Pose, 2.3, 2, Args.sasa_probe_radius, SasaScale, 'SG', 'SG', False)
+      AllConstraints.extend(DisulfAllConstraints)
 
+    print AllConstraints, SortedConstraints
+    print 
     print DisulfAllConstraints, DisulfSortedConstraints
     sys.exit()
 
