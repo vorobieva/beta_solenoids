@@ -35,14 +35,13 @@ from rosetta.utility import ostream
 class constraint_extrapolator:
   """ constraint extrapolator """
   def __init__(self, CstFilename):
-    '''
-    Makes hash: self.Cst[Residue] = { AtomName: (AllAtomResiduePairs, ConstraintParameters, LineNumber) }  '''
+    ''' Makes hash: self.Cst[Residue] = { AtomName: (AllAtomResiduePairs, ConstraintParameters, LineNumber) } '''
 
     self.CstFilename = CstFilename
     with open(CstFilename, 'r') as CstFile:
       self.CstLines = CstFile.readlines()
     
-    print 'self.CstLines:', self.CstLines
+    # print 'self.CstLines:', self.CstLines
     self.Cst = {}
 
     for iLine, Line in enumerate(self.CstLines):
@@ -316,12 +315,12 @@ class constraint_extrapolator:
     self.output_cst(AllRepeatCst, 'AllRepeatCst.cst')
 
     ''' trying out constraints to pick between edge 1 and edge 2 (and filter?) '''
-    print
-    print 'MiddleSkippedCst', MiddleSkippedCst
-    print 'Edge1SkippedCst', Edge1SkippedCst
-    print 'Edge2SkippedCst', Edge2SkippedCst
-    print 'BothEdgeSkippedCst', BothEdgeSkippedCst
-    print
+    # print
+    # print 'MiddleSkippedCst', MiddleSkippedCst
+    # print 'Edge1SkippedCst', Edge1SkippedCst
+    # print 'Edge2SkippedCst', Edge2SkippedCst
+    # print 'BothEdgeSkippedCst', BothEdgeSkippedCst
+    # print
     # print 'MiddleRepeatCst' 
     NumberMiddleRepeatCst = len(MiddleRepeatCstList)
     # print 'Edge1RepeatCst'
@@ -414,7 +413,7 @@ class constraint_extrapolator:
 
     # CuratedRepeatCst
     # print 'Edge1ScoreNorm, Edge2ScoreNorm', Edge1ScoreNorm, Edge2ScoreNorm
-    self.output_cst(CuratedRepeatCst, FinalCstName)
+    # self.output_cst(CuratedRepeatCst, FinalCstName)
 
     AllWithEdge1RepeatCst = MiddleRepeatCstList[:]
     ## whether these should be included or not is up in the air!!
@@ -430,6 +429,9 @@ class constraint_extrapolator:
     self.output_cst(AllWithEdge1RepeatCst, ModFinalCstName+'_e1.cst')
     self.output_cst(AllWithEdge2RepeatCst, ModFinalCstName+'_e2.cst')
 
+    RemainingTempFiles = glob.glob( '%s_*Temp.cst'%PdbTag )
+    for File in RemainingTempFiles:
+      subprocess.check_output(['rm', File])
 
 def pose_has(Pose, AtomResidueCoords):
   for AtomName, ResidueNumber in AtomResidueCoords:

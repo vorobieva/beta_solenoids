@@ -10,8 +10,7 @@ This script is to generate ATOMPAIR constraints for Rosetta,
 '''
 
 # uncomment just next line and copy block in multiline string for ipython mode
-'''
-
+# '''
 
 from multiprocessing import Process
 from scipy import spatial
@@ -30,7 +29,7 @@ if '-h' not in sys.argv:
 
 # '''
 
-sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
+# sys.argv.extend(['-pdbs', '1EZG.pdb', '-out', './' ])
 
 ThreeToOne = {'GLY':'G','ALA':'A','VAL':'V','LEU':'L','ILE':'I','MET':'M','PRO':'P','PHE':'F','TRP':'W','SER':'S','THR':'T','ASN':'N','GLN':'Q','TYR':'Y','CYS':'C','CYD':'C','LYS':'K','ARG':'R','HIS':'H','ASP':'D','GLU':'E','STO':'*','UNK':'U'}
 ChainAlphabetIndices = {'A':1, 'B':2, 'C':3, 'D':4, 'E':5, 'F':6, 'G':7, 'H':8, 'I':9, 'J':10, 'K':11, 'L':12, 'M':13, 'N':14, 'O':15, 'P':16, 'Q':17, 'R':18, 'S':19, 'T':20, 'U':21, 'V':22, 'W':23, 'X':24, 'Y':25, 'Z':26 }
@@ -404,13 +403,16 @@ def main(argv=None):
     AllConstraints, SortedConstraints = get_pose_constraints(Pose, Args.max_dist, Args.min_seq_sep, Args.sasa_probe_radius, SasaScale, Args.upstream_atom, Args.downstream_atom, True)
     
     if Args.disulfide:
-      DisulfAllConstraints, DisulfSortedConstraints = get_pose_constraints(Pose, 2.3, 2, Args.sasa_probe_radius, SasaScale, 'SG', 'SG', False)
+      DisulfAllConstraints, DisulfSortedConstraints = get_pose_constraints(Pose, 3.5, 2, Args.sasa_probe_radius, SasaScale, 'SG', 'SG', False)
       AllConstraints.extend(DisulfAllConstraints)
 
-    print AllConstraints, SortedConstraints
-    print 
-    print DisulfAllConstraints, DisulfSortedConstraints
-    sys.exit()
+    # print AllConstraints
+    # print SortedConstraints
+    # print 
+    # print
+    # print DisulfAllConstraints
+    # print DisulfSortedConstraints
+    # sys.exit()
 
     CstName = OutputPdb.replace('.pdb', '_All.cst')
     with open(CstName, 'w') as CstFile:
@@ -427,7 +429,9 @@ def main(argv=None):
     CstName = OutputPdb.replace('.pdb', '_SCSC.cst')
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(SidechainSidechainCst) 
-
+    CstName = OutputPdb.replace('.pdb', '_Disulf.cst')
+    with open(CstName, 'w') as CstFile:
+      print>>CstFile, '\n'.join(DisulfAllConstraints)
 
 if __name__ == "__main__":
   sys.exit(main())
