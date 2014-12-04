@@ -113,3 +113,20 @@ class tracker:
 
     self.plot_traces( PlotName, ScoreTraces )
 
+
+def main():
+  if argv is None:
+    argv = sys.argv
+  
+  # ArgParser = argparse.ArgumentParser(description=" args for ice nucleation slice inference ")
+  # ArgParser.add_argument('-thread', type=int, help=" number of threads to run simultaneously ", default=5 )     
+  # ArgParser.add_argument('-exclude', type=str, help="  ", default='GS' )    
+  # Args = ArgParser.parse_args()
+  
+  pass
+  # AtomPairCst = set_all_weights_zero( rosetta.getScoreFunction() )
+  # AtomPairCst.set_weight(rosetta.atom_pair_constraint, 1.0)  
+  # AngleCst = set_all_weights_zero( rosetta.getScoreFunction() )
+  # AngleCst.set_weight(rosetta.angle_constraint, 1.0)
+  # DihedralCst = set_all_weights_zero( rosetta.getScoreFunction() )
+  # DihedralCst.set_weight(rosetta.dihedral_constraint, 1.0)
