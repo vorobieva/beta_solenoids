@@ -6,7 +6,7 @@ Run on expanded pose with src range tag in pdb name like:
 
 '''
 
-'''
+# '''
 ### external
 ### libraries
 
@@ -32,10 +32,11 @@ if '-h' not in sys.argv:
   from generate_backbones import get_residue_array
   from expand_constraints import constraint_extrapolator 
   from expand_constraints import pose_has
+  from expand_constraints import set_all_weights_zero
 
 # '''
 
-sys.argv = [ sys.argv[0], '-ref_pdb', '1EZG_Relax.pdb', '-ref_cst', '1EZG_Relax_All.cst', '-repeat_tag', 'rep24_1EZG_Relax']
+# sys.argv = [ sys.argv[0], '-ref_pdb', '1EZG_Relax.pdb', '-ref_cst', '1EZG_Relax_All.cst', '-repeat_tag', 'rep24_1EZG_Relax']
 
 
 def cap_and_relax_pdb( (RepeatPdb, ReferencePdb, ReferenceCst) ):
@@ -206,17 +207,34 @@ def cap_and_relax_pdb( (RepeatPdb, ReferencePdb, ReferenceCst) ):
   Constrainer.constraint_file(CapCstName)
   Constrainer.apply(IdealizedCappedPose)
 
-
   ''' SET UP WEIGHTS AS decided '''
 
+  # RelativeWeight = 0.1
 
   Talaris = rosetta.getScoreFunction()
-  rosetta.relax_pose(IdealizedCappedPose, Talaris, 'tag')
+  TalarisPlusCst = rosetta.getScoreFunction()
+  AtomPairCst = set_all_weights_zero( rosetta.getScoreFunction() )
+  AtomPairCst.set_weight(rosetta.atom_pair_constraint, 1.0)
 
+  # RosettaScore = Talaris(IdealizedCappedPose) 
+  # AtomPairCstScore = AtomPairCst(IdealizedCappedPose)
+  
+  # Weight = ( RosettaScore * RelativeWeight ) / AtomPairCstScore  
+  Weight = 1.0
+  TalarisPlusCst.set_weight(rosetta.atom_pair_constraint, Weight)
+  TalarisPlusCst.set_weight(rosetta.angle_constraint, Weight)
+  TalarisPlusCst.set_weight(rosetta.dihedral_constraint, Weight)
 
-  RelaxedPdbName = re.sub(r'(.*)_Ideal.pdb$', r'\1_Relax.pdb', IdealizedPdbNewName)
+  print 'relaxing %s with %s'%(IdealizedPdbNewName, CapCstName) 
+  print ' Weight %d '%Weight
+  rosetta.relax_pose(IdealizedCappedPose, TalarisPlusCst, 'tag')
+  RelaxedPdbName = re.sub(r'(.*)_Ideal.pdb$', r'\1__Relax.pdb', IdealizedPdbNewName)
   rosetta.dump_pdb(IdealizedCappedPose, RelaxedPdbName)
 
+  rosetta.relax_pose(IdealizedCappedPose, Talaris, 'tag')
+
+  RelaxedPdbName = re.sub(r'(.*)_Ideal.pdb$', r'\1__Relax2.pdb', IdealizedPdbNewName)
+  rosetta.dump_pdb(IdealizedCappedPose, RelaxedPdbName)
 
 
 def main(argv=None):
@@ -229,7 +247,6 @@ def main(argv=None):
   ArgParser.add_argument('-ref_cst', type=str, help=' Reference pdb ', required=True)
   ArgParser.add_argument('-repeat_tag', type=str, help=' Input pdb tag ', required=True)
   ArgParser.add_argument('-thread', type=int, help=" number of threads to run simultaneously ", default=15 ) # with default, there can be only one !
-
   # Optional args
   ArgParser.add_argument('-out', type=str, help=' Output directory ', default='./')
   Args = ArgParser.parse_args()
@@ -259,16 +276,18 @@ def main(argv=None):
     ParallelizableInputTuples = []
     for Pdb in PdbSubset:
       ParallelizableInputTuples.append((Pdb, ReferencePdb, ReferenceCst))
-    
-    for InputTuple in ParallelizableInputTuples:
-      # print 'Error in one of pooled multiprocessing threads; iterating sequentially for debugging '
-      cap_and_relax_pdb(InputTuple)
 
-    # pool = Pool(processes=len(ParallelizableInputTuples))
-    # pool.map(cap_and_relax_pdb, ParallelizableInputTuples)
+    ### Iterative for debug    
+    # for InputTuple in ParallelizableInputTuples:
+    #   # print 'Error in one of pooled multiprocessing threads; iterating sequentially for debugging '
+    #   cap_and_relax_pdb(InputTuple)
+
+    ### Parallel for running
+    pool = Pool(processes=len(ParallelizableInputTuples))
+    pool.map(cap_and_relax_pdb, ParallelizableInputTuples)
 
 
 
-# if __name__ == "__main__":
-#   sys.exit(main())
+if __name__ == "__main__":
+  sys.exit(main())
 

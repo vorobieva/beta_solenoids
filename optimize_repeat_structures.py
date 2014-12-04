@@ -2,7 +2,9 @@
 InfoString = ''' 
 To optimize repeat backbone with NCS torsion constraint and other constraints'''
 
-'''
+import sys
+
+# '''
 # from repo 
 import score_plotter
 
@@ -13,7 +15,6 @@ import subprocess
 import argparse
 import glob
 import time
-import sys
 import os
 import re
 
@@ -195,38 +196,37 @@ def optimize_repeat_pdb( (Pdb, CstSets, RepeatLength, NativePdb) ):
     Constrainer.apply(CstPose)
 
 
-    for RelativeWeight in [0.1, 0.01]:
-      # remake Trekker for each cst and technique attempted
-      # Trekker = score_plotter.tracker(InputScoreFxnList=[PureTalaris, AllCst, AtomPairCst], FxnNames=['Talaris', 'AllCst', 'AtomPairCst'])#, CompareToPose=NativePose)
-      FaRepCstRelaxPose = CstPose.clone()
-      FaRepScore = FaRepFxn(FaRepCstRelaxPose)
-      CstPlusRep.set_weight(rosetta.fa_rep, 0.0)
-      CstScore = CstPlusRep(FaRepCstRelaxPose)
-      Weight = ( CstScore * RelativeWeight ) / FaRepScore
+    # for RelativeWeight in [0.1, 0.01]:
+    #   # remake Trekker for each cst and technique attempted
+    #   # Trekker = score_plotter.tracker(InputScoreFxnList=[PureTalaris, AllCst, AtomPairCst], FxnNames=['Talaris', 'AllCst', 'AtomPairCst'])#, CompareToPose=NativePose)
+    #   FaRepCstRelaxPose = CstPose.clone()
+    #   FaRepScore = FaRepFxn(FaRepCstRelaxPose)
+    #   CstPlusRep.set_weight(rosetta.fa_rep, 0.0)
+    #   CstScore = CstPlusRep(FaRepCstRelaxPose)
+    #   Weight = ( CstScore * RelativeWeight ) / FaRepScore
 
-      CstPlusRep.set_weight(rosetta.fa_rep, Weight)
-      print ' fa rep weighted %.2f relative to cst !!! '%RelativeWeight
-      CstPlusRep.show(FaRepCstRelaxPose)
+    #   CstPlusRep.set_weight(rosetta.fa_rep, Weight)
+    #   print ' fa rep weighted %.2f relative to cst !!! '%RelativeWeight
+    #   CstPlusRep.show(FaRepCstRelaxPose)
 
-      rosetta.relax_pose(FaRepCstRelaxPose, CstPlusRep, 'tag')
-      # Trekker.score(FaRepCstRelaxPose)
-      CstPlusRep.show(FaRepCstRelaxPose)
-      rosetta.dump_pdb( FaRepCstRelaxPose, CstStemName+'_FaRepCst%.2f.pdb'%RelativeWeight )
+    #   rosetta.relax_pose(FaRepCstRelaxPose, CstPlusRep, 'tag')
+    #   # Trekker.score(FaRepCstRelaxPose)
+    #   CstPlusRep.show(FaRepCstRelaxPose)
+    #   rosetta.dump_pdb( FaRepCstRelaxPose, CstStemName+'_FaRepCst%.2f.pdb'%RelativeWeight )
       
-      OptimizedPoses.append(FaRepCstRelaxPose)
-      PoseIDs.append('FaRepCst_%.2f'%RelativeWeight)
+    #   OptimizedPoses.append(FaRepCstRelaxPose)
+    #   PoseIDs.append('FaRepCst_%.2f'%RelativeWeight)
 
+    # FaRepCstRelaxPose.remove_constraints()
+    # SetupNCS.apply(FaRepCstRelaxPose)
 
-    FaRepCstRelaxPose.remove_constraints()
-    SetupNCS.apply(FaRepCstRelaxPose)
-
-    rosetta.relax_pose(FaRepCstRelaxPose, SymmTalaris, 'tag')
-    # Trekker.score(FaRepCstRelaxPose)
-    rosetta.dump_pdb( FaRepCstRelaxPose, CstStemName+'_CstFaRep_Relax.pdb' )
+    # rosetta.relax_pose(FaRepCstRelaxPose, SymmTalaris, 'tag')
+    # # Trekker.score(FaRepCstRelaxPose)
+    # rosetta.dump_pdb( FaRepCstRelaxPose, CstStemName+'_CstFaRep_Relax.pdb' )
 
     # AllCstTraces.extend( Trekker.plot_scores('', 'CstFaRep_'+CstStemName, True) )
 
-    for RelativeWeight in [0.05, 0.1, 0.2]:
+    for RelativeWeight in [0.05]: #, 0.1, 0.2]:
 
       ######remake Trekker for each cst and technique attempted
       # Trekker = score_plotter.tracker(InputScoreFxnList=[PureTalaris, AllCst, AtomPairCst], FxnNames=['Talaris', 'AllCst', 'AtomPairCst'])#, CompareToPose=NativePose)    
@@ -235,7 +235,7 @@ def optimize_repeat_pdb( (Pdb, CstSets, RepeatLength, NativePdb) ):
 
       RosettaScore = PureTalaris(TalCstRelaxPose) 
       AtomPairCstScore = AtomPairCst(TalCstRelaxPose)
-      Weight = ( RosettaScore * RelativeWeight ) / AtomPairCstScore  
+      Weight = np.abs( ( RosettaScore * RelativeWeight ) / AtomPairCstScore )
       TalarisPlusCst.set_weight(rosetta.atom_pair_constraint, Weight)
 
       print 'Prerelax, weighted atom pairs at %f '%RelativeWeight
@@ -254,28 +254,26 @@ def optimize_repeat_pdb( (Pdb, CstSets, RepeatLength, NativePdb) ):
       # Trekker.score(TalCstRelaxPose)
       rosetta.dump_pdb( TalCstRelaxPose, CstStemName+'_TalCst%.3f_Relax.pdb'%RelativeWeight )
 
-      OptimizedPoses.append(TalCstRelaxPose)
-      PoseIDs.append('TalCst_%.2f'%RelativeWeight)
+      # OptimizedPoses.append(TalCstRelaxPose)
+      # PoseIDs.append('TalCst_%.2f'%RelativeWeight)
       # AllCstTraces.extend( Trekker.plot_scores('', 'TalCst'+CstStemName+'_%.3f'%RelativeWeight, True) )
 
     # TalarisPlusCst
     # LoopLastIteration = len(Trekker.Scores[0])
 
   JustRelaxPose = Pose.clone()
-  SetupNCS.apply(JustRelaxPose)
+  SetupNCS.apply( JustRelaxPose )
 
-  # # to be fair run normal relax twice
-  # rosetta.relax_pose(JustRelaxPose, SymmTalaris, 'tag')
-  # rosetta.relax_pose(JustRelaxPose, SymmTalaris, 'tag')
+  rosetta.relax_pose( JustRelaxPose, SymmTalaris, 'tag' )
+  rosetta.dump_pdb( JustRelaxPose, CstStemName+'_JustRelax.pdb' )
 
-  PoseScores = [ str(PureTalaris(Pose)) for Pose in OptimizedPoses ]
-
-  SterileName = re.sub(r'[\.\-\,\\\/ ]', r'_', '%s_trajectories'%Pdb )
-  print 'SterileName', SterileName
-  with open(SterileName+'_opt.log', 'w') as PdbOptimizationLog:
-    print>>PdbOptimizationLog, '\t'.join( PoseIDs )
-    print>>PdbOptimizationLog, '\t'.join( PoseScores )
-  # Trekker.plot_traces( SterileName, AllCstTraces )
+  # PoseScores = [ str(PureTalaris(Pose)) for Pose in OptimizedPoses ]
+  # SterileName = re.sub(r'[\.\-\,\\\/ ]', r'_', '%s_trajectories'%Pdb )
+  # print 'SterileName', SterileName
+  # with open(SterileName+'_opt.log', 'w') as PdbOptimizationLog:
+  #   print>>PdbOptimizationLog, '\t'.join( PoseIDs )
+  #   print>>PdbOptimizationLog, '\t'.join( PoseScores )
+  # # Trekker.plot_traces( SterileName, AllCstTraces )
 
 
 def main(argv=None):
@@ -322,8 +320,8 @@ def main(argv=None):
     pool.map(optimize_repeat_pdb, OptimizationInputTuples)
 
 
-# if __name__ == "__main__":
-#   sys.exit(main())
+if __name__ == "__main__":
+  sys.exit(main())
 
 # def parallel_relax((Pdb)):
 #   Pose = rosetta.pose_from_pdb(Pdb)

@@ -21,16 +21,16 @@ if '-h' not in sys.argv:
   rosetta.init()
   # from beta_solenoids repo 
   import solenoid_tools
-## debug
-# rosetta.init(extra_options = "-out:level 1000")
+  ## debug
+  # rosetta.init(extra_options = "-out:level 1000")
 
-## runtime
-# rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
-from rosetta.protocols import grafting 
-from rosetta.utility import ostream
+  ## runtime
+  # rosetta.init(extra_options = "-mute basic -mute core -mute protocols")
+  from rosetta.protocols import grafting 
+  from rosetta.utility import ostream
 
 # ''' 
-# sys.argv = [sys.argv[0], '-repeat_pdb_tag', '_1EZG', '-reference_pdb', '1EZG.pdb', '-reference_cst', '1EZG_ON_All.cst']
+# sys.argv = [sys.argv[0], '-repeat_pdb_tag', '_1EZG', '-ref_pdb', '1EZG.pdb', '-ref_cst', '1EZG_ON_All.cst']
 
 class constraint_extrapolator:
   """ constraint extrapolator """
@@ -489,8 +489,8 @@ def main(argv=None):
   # Arg block
   ArgParser = argparse.ArgumentParser(description=' expand_constraints.py ( -help ) %s'%InfoString)
   # Required args
-  ArgParser.add_argument('-reference_pdb', type=str, help=' reference pdb ', required=True)
-  ArgParser.add_argument('-reference_cst', type=str, help=' corresponding to reference pdb ', required=True)
+  ArgParser.add_argument('-ref_pdb', type=str, help=' reference pdb ', required=True)
+  ArgParser.add_argument('-ref_cst', type=str, help=' corresponding to reference pdb ', required=True)
   ArgParser.add_argument('-repeat_pdb_tag', type=str, help=' input pdb tag ', required=True)
   # Optional args
   ArgParser.add_argument('-out', type=str, help=' Output directory ', default='./')
@@ -506,15 +506,15 @@ def main(argv=None):
   ScoreFunction.set_weight(rosetta.angle_constraint, 1.0)
   ScoreFunction.set_weight(rosetta.dihedral_constraint, 1.0)
 
-  RefPdb = Args.reference_pdb
+  RefPdb = Args.ref_pdb
   # print RefPdb
   ReferencePose = rosetta.pose_from_pdb( RefPdb )
   print 'ReferencePose', ReferencePose
 
   # modify rosetta cst w/o rosetta
-  Constrainer = constraint_extrapolator(Args.reference_cst)
+  Constrainer = constraint_extrapolator(Args.ref_cst)
 
-  # RefCst = Args.reference_cst
+  # RefCst = Args.ref_cst
   # # make constraint mover
   # Constrainer = rosetta.ConstraintSetMover()
   # # get constraints from file
