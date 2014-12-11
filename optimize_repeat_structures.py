@@ -2,12 +2,8 @@
 InfoString = ''' 
 To optimize repeat backbone with NCS torsion constraint and other constraints'''
 
-import sys
 
 # '''
-# from repo 
-import score_plotter
-
 # libraries
 from multiprocessing import Pool
 import numpy as np
@@ -15,6 +11,7 @@ import subprocess
 import argparse
 import glob
 import time
+import sys
 import os
 import re
 
@@ -28,8 +25,7 @@ if '-h' not in sys.argv:
 # from rosetta.protocols import grafting 
 
 '''
-# sys.argv.extend(['-pdb_stem', '3ult_rep', '-thread', '18'])
-'''
+### '''
 
 
 def minimize_pose_backbone( (Pose, ScoreFunction) ):
@@ -42,6 +38,12 @@ def minimize_pose_backbone( (Pose, ScoreFunction) ):
   MinimizationMover.score_function(ScoreFunction)
   MinimizationMover.apply(MinPose)
   return MinPose
+
+def responsibly_optimize_repeat_pdbs( ListOfPdbTuplesForThisThread ):
+
+  for OptTuple in ListOfPdbTuplesForThisThread:
+    print 'Starting new optimization trajectory'
+    optimize_repeat_pdb(OptTuple)
 
 
 def optimize_repeat_pdb( (Pdb, CstSets, RepeatLength) ):
@@ -149,6 +151,7 @@ def optimize_repeat_pdb( (Pdb, CstSets, RepeatLength) ):
   rosetta.relax_pose( JustRelaxPose, SymmTalaris, 'tag' )
   rosetta.dump_pdb( JustRelaxPose, CstStemName+'_JustRelax.pdb' )
 
+#### sys.argv = [sys.argv[0], '-pdb_stem', 'rep40_2G0Y_Relax', '-thread', '5']
 
 def main(argv=None):
   if argv is None:
@@ -169,6 +172,9 @@ def main(argv=None):
     Csts = [ Cst for Cst in Csts if not Cst.endswith('Temp.cst') ]
     CstHash[Pdb] = Csts
 
+  JobOptTuplesSortedByThread = [[] for i in range(Args.thread)]
+
+  print 'JobOptTuplesSortedByThread', JobOptTuplesSortedByThread
   # print CstHash
   for ThreadChunkNumber in range( (len(Pdbs)/Args.thread) + 1):
   # for ThreadChunkNumber in range( 1 ):
@@ -181,56 +187,26 @@ def main(argv=None):
     print 'PdbSubset:', PdbSubset 
     for i, Pdb in enumerate(PdbSubset):
       RepeatLength = int(re.sub(r'.*rep(\d+)_.*', r'\1', Pdb))
-      OptimizationInputTuples.append( (Pdb, CstHash[Pdb], RepeatLength) )
+
+      # OptimizationInputTuples.append( (Pdb, CstHash[Pdb], RepeatLength) )
+      JobOptTuplesSortedByThread[i].append( (Pdb, CstHash[Pdb], RepeatLength) )
 
     # for InputTuple in OptimizationInputTuples:
     #   # print 'Error in one of pooled multiprocessing threads; iterating sequentially for debugging '
     #   optimize_repeat_pdb(InputTuple)
 
-    pool = Pool(processes=len(OptimizationInputTuples))
-    pool.map(optimize_repeat_pdb, OptimizationInputTuples)
+    # pool = Pool(processes=len(OptimizationInputTuples))
+    # pool.map(optimize_repeat_pdb, OptimizationInputTuples)
+
+
+  # for JobSet in JobOptTuplesSortedByThread:
+  #   responsibly_optimize_repeat_pdbs(JobSet)
+
+  pool = Pool(processes=len(JobOptTuplesSortedByThread))
+  pool.map(responsibly_optimize_repeat_pdbs, JobOptTuplesSortedByThread)
+  
+
 
 if __name__ == "__main__":
   sys.exit(main())
-
-# def parallel_relax((Pdb)):
-#   Pose = rosetta.pose_from_pdb(Pdb)
-#   Talaris = rosetta.getScoreFunction()
-#   rosetta.relax_pose(Pose, Talaris, 'tag')
-#   rosetta.dump_pdb(Pose, re.sub(r'(.*).pdb$', r'\1_Relax.pdb', Pdb) )
-#   Talaris.show(Pose)
-
-
-#   ''' #threadable backbone breathing and side chain repacking with constraints ''' 
-#   print 'Starting work on', Pose
-
-#   movemap = rosetta.MoveMap()
-#   movemap.set_bb(True)
-#   movemap.set_chi(True)
-
-#   Small_Mover = rosetta.SmallMover(movemap, kT, 1)
-#   Shear_Mover = rosetta.ShearMover(movemap, kT, 1)
-
-#   MontyCarlos = rosetta.MonteCarlo(Pose, ScoreFunction, kT)
-
-#   ScoreCounter = 0
-
-#   for g in range(Gen):
-#     ScoreCounter += 1
-#     if ScoreCounter >= Score:
-#       ScoreCounter = 0 
-#       ScoreTracker.score(Pose)
-
-
-#     Small_Mover.apply(Pose)
-#     MontyCarlos.boltzmann(Pose)
-    
-#     Shear_Mover.apply(Pose)
-#     MontyCarlos.boltzmann(Pose)
-
-#   # print MontyCarlos.show_scores()
-#   # print MontyCarlos.show_counters()
-#   # print MontyCarlos.show_state()
-
-#   return ScoreTracker
 

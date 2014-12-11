@@ -33,6 +33,8 @@ def main(argv = None):
     with open(cst, 'r') as CstInput:
       CstLines = CstInput.readlines()
 
+    # print CstLines
+    # print 'cst', cst
     NameTag = (cst+'!').replace('.cst!', '').replace('!', '')
     if Args.name or Args.multi:
       PymolName = '_'+NameTag[:]
