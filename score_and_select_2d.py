@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-'''
+# '''
 import numpy as np
 import subprocess
 import itertools
@@ -244,7 +244,7 @@ class plotly_plotter:
       plot_url = self.py.plot(fig, filename=ComboName)
 
 
-sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
+# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
 
 
 def main(argv=None):
@@ -479,6 +479,6 @@ def main(argv=None):
     subprocess.check_output([ 'cp', Pdb, Args.out ])
 
 
-# if __name__ == "__main__":
-#   sys.exit(main())
+if __name__ == "__main__":
+  sys.exit(main())
 
