@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-'''
+# '''
 import numpy as np
 import subprocess
 import itertools
@@ -239,7 +239,7 @@ class plotly_plotter:
       plot_url = self.py.plot(fig, filename=PlotName)
 
 
-sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
+# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
 # sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats', '-score', '-1.5' ]
 
 
@@ -481,9 +481,6 @@ def main(argv=None):
 ###### CapCstName = re.sub(r'(.*).pdb$', r'\1.cst', CappedNamePdb)
 
 
-# if __name__ == "__main__":
-#   sys.exit(main())
+if __name__ == "__main__":
+  sys.exit(main())
 
-
-
---
