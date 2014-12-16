@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-# '''
+'''
 import numpy as np
 import subprocess
 import itertools
@@ -24,7 +24,7 @@ if '-h' not in sys.argv:
 # '''
 
 class plotly_plotter:
-  def __init__(self, User, Key, ScoreFxns=[], FxnNames=[], PerResidue=True):
+  def __init__(self, User, Key, RefPdb, ScoreFxns=[], FxnNames=[], PerResidue=True):
     ''' Track scores of design trajectories for plotly plots '''
 
     self.User = User
@@ -32,27 +32,35 @@ class plotly_plotter:
 
     import plotly.graph_objs as Graph
     import plotly.plotly as py
+
     self.Graph = Graph
     self.py = py 
 
     self.ScoreFxns = ScoreFxns
     self.FxnNames = FxnNames
-
     assert len(self.ScoreFxns) == len(self.FxnNames)
 
     self.PerRes = PerResidue
-    self.ScoreTraces = []
 
-    self.ColorIterator = 0
-    # self.Colors = [] ##### add crayons here
+    self.RefPdb = RefPdb
+    
+    self.RefPose = rosetta.pose_from_pdb( RefPdb )
 
-    self.MaxX = 0
+    self.Score2dComboTraces = {}
+    # self.ColorIterator = 0
+    # self.Colors = [] 
 
+    self.MaxScores = [ 0 for Fxn in self.ScoreFxns ]
+    self.MinScores = [ 999 for Fxn in self.ScoreFxns ]
+
+    # Scores ordered in all score lists in same order for ploting
+    self.TaggedPoseScores = {}
+    self.PoseTags = []
     # Later keyed with index of self.ScoreFxns
     self.ScoreFunctionScoredPdbs = {}
 
   def clear_traces(self):
-    self.ScoreTraces = []
+    self.Score2dComboTraces = {}
 
   def add_fxn(self, OtherScoreFxn, FxnNames):
     ''' add addional score functions '''
@@ -74,16 +82,16 @@ class plotly_plotter:
     CstName = glob.glob('%s.cst'%StemName)[0]
     return CstName
 
-  def score_poses(self, Poses, Cst=0, Name='', Color=''):
+  def score_poses(self, Poses, Cst=0, Tag='', Color=''):
     ''' Give a list of rosetta poses '''
 
-    PdbNames = [ Pose.pdb_info().name() for Pose in Poses ] 
+    self.PdbNames = [ Pose.pdb_info().name() for Pose in Poses ] 
     
     if Cst == 1:
-      CstNames = [ self.glob_cst_file(Pdb) for Pdb in PdbNames]
-      print 
-      print 'PdbNames', PdbNames
-      print 'CstNames', CstNames
+      CstNames = [ self.glob_cst_file(Pdb) for Pdb in self.PdbNames]
+      # print 
+      # print 'self.PdbNames', self.PdbNames
+      # print 'CstNames', CstNames
       for i, Pose in enumerate(Poses):
         # make constraint mover
         Constrainer = rosetta.ConstraintSetMover()
@@ -91,71 +99,113 @@ class plotly_plotter:
         Constrainer.constraint_file(CstNames[i])
         Constrainer.apply(Pose)
 
-    # self.FxnNames
-    ScoreFunctionScores = []
     
+    # Loop through all score functions and score poses    
     for i, Fxn in enumerate(self.ScoreFxns):
       if self.PerRes:
         PoseScores = [ Fxn(Pose) / Pose.n_residue() for Pose in Poses ]
       else:
         PoseScores = [ Fxn(Pose) for Pose in Poses ]
 
-      if len(Name):
-        PlotName = Name+'  '+self.FxnNames[i]
-      else:
-        PlotName = self.FxnNames[i]
-
-      ScoreFunctionScores.append(PoseScores)
-      ScoredPdbList = [ (PoseScores[j], Pose.pdb_info().name() ) for j, Pose in enumerate(Poses)]
+      try:
+        DictCheck = self.TaggedPoseScores[Tag]
+      except KeyError:
+        self.TaggedPoseScores[Tag] = {}
+        self.PoseTags.append(Tag)
 
       try:
+        self.TaggedPoseScores[Tag][i].extend(PoseScores)
+      except KeyError:
+        self.TaggedPoseScores[Tag][i] = PoseScores 
+
+      ScoredPdbList = [ (PoseScores[j], Pose.pdb_info().name() ) for j, Pose in enumerate(Poses)]
+      try:
         self.ScoreFunctionScoredPdbs[i].extend( ScoredPdbList )
-      except:
+      except KeyError:
         self.ScoreFunctionScoredPdbs[i] = ScoredPdbList 
 
-    FxnCombos = itertools.combinations( range(0, len(ScoreFunctionScores) ), 2 )
+
+  def plot_2d_score_combinations(self):
+
+    FxnCombos = itertools.combinations( range(0, len(self.ScoreFxns) ), 2 )
     AllTraces = []
     TraceInfo = []
 
+    print 'self.Score2dComboTraces', 2, self.Score2dComboTraces
+
     for Combo in FxnCombos:
-      x = Combo[0]
-      y = Combo[1] 
+  
+      #            ///
+      ComboKey = '%d_%d' % (Combo[0], Combo[1])
+      #            | |
+      #             M
+      #           kevin is 2-D
+      #       but he can show you many
+      #          two by two by two
+  
+      print 'ComboKey:', ComboKey
+  
+      for Tag in self.PoseTags:
 
-      ComboTrace = self.Graph.Scatter(
-          x=ScoreFunctionScores[x],
-          y=ScoreFunctionScores[y],
-          text=PdbNames,
+        ComboTrace = self.Graph.Scatter(
+          x=self.TaggedPoseScores[Tag][ Combo[0] ],
+          y=self.TaggedPoseScores[Tag][ Combo[1] ],
+          text=self.PdbNames,
           mode='markers',
-          name=Name
-      )
+          name=Tag                    )
+  
+        try:
+          self.Score2dComboTraces[ComboKey].append( ComboTrace )
+        except:
+          self.Score2dComboTraces[ComboKey] = [ ComboTrace ]
 
-      self.ScoreTraces.append(ComboTrace)
+        if max( self.TaggedPoseScores[Tag][ Combo[0] ] ) > self.MaxScores[ Combo[0] ]:
+          self.MaxScores[ Combo[0] ] = max( self.TaggedPoseScores[Tag][ Combo[0] ] )
+        if max( self.TaggedPoseScores[Tag][ Combo[1] ] ) > self.MaxScores[ Combo[1] ]:
+          self.MaxScores[ Combo[1] ] = max( self.TaggedPoseScores[Tag][ Combo[1] ] )
+        
+        if min( self.TaggedPoseScores[Tag][ Combo[0] ] ) < self.MinScores[ Combo[0] ]:
+          self.MinScores[ Combo[0] ] = min( self.TaggedPoseScores[Tag][ Combo[0] ] )
+        if min( self.TaggedPoseScores[Tag][ Combo[1] ] ) < self.MinScores[ Combo[1] ]:
+          self.MinScores[ Combo[1] ] = min( self.TaggedPoseScores[Tag][ Combo[1] ] )
 
-      MaxX = max( ScoreFunctionScores[x] )
+    print 'self.Score2dComboTraces', 2.5, self.Score2dComboTraces
 
-      if MaxX > self.MaxX:
-        self.MaxX = MaxX
 
-  def add_comparsion_threshold(self, Pose, Function, Xaxis):
-    ''' for adding native pose energy line to compare designs against'''
-
-    # for i, Fxn in enumerate(self.ScoreFxns):
+  def draw_comparisons(self):
+    
+    self.RefScores = [ Fxn(self.RefPose) for Fxn in self.ScoreFxns ]
     if self.PerRes:
-      NativeScore = Function(Pose) / Pose.n_residue()
-    else:
-      NativeScore = Function(Pose)
+      self.RefScores = [ ( Score / self.RefPose.n_residue() ) for Score in self.RefScores ]
 
-    NativePoseScores = [ NativeScore for j in range(len(Xaxis)) ]
+    print 'self.Score2dComboTraces', 3, self.Score2dComboTraces
 
-    CompareTrace = self.Graph.Scatter(
-    x = Xaxis,
-    y = NativePoseScores,
-    name = Pose.pdb_info().name()+' native',
-    mode ='lines' )
-    self.ScoreTraces.append(CompareTrace)
+    for ComboKey in self.Score2dComboTraces:
+      Combo = [ int(i) for i in ComboKey.split('_') ]
+      Xaxis = [ self.MinScores[Combo[0]], self.MaxScores[Combo[0]] ]
+      NativePoseScores = [ self.RefScores[Combo[1]] for j in range(len(Xaxis)) ]
+
+      CompareTrace = self.Graph.Scatter(
+      x = Xaxis,
+      y = NativePoseScores,
+      name = self.RefPdb,
+      mode ='lines' )
+      self.Score2dComboTraces[ComboKey].append(CompareTrace)
+
+      Yaxis = [ self.MinScores[Combo[1]], self.MaxScores[Combo[1]] ]
+      NativePoseScores = [ self.RefScores[Combo[0]] for j in range(len(Yaxis)) ]
+
+      CompareTrace = self.Graph.Scatter(
+      x = NativePoseScores,
+      y = Yaxis,
+      name = self.RefPdb,
+      mode ='lines' )
+      self.Score2dComboTraces[ComboKey].append(CompareTrace)
+
+    print 'self.Score2dComboTraces', 4, self.Score2dComboTraces
 
 
-  def plot_traces(self, PlotName='Unamed', Xaxis='', Yaxis=''):
+  def render_scatter_plot(self, PlotName='Unamed'):
     ''' Plot premade plotly traces. Used within plot_scores, but 
     can also be used on larger collection of traces '''
     # Import plotly for ploting 
@@ -163,25 +213,33 @@ class plotly_plotter:
     
     # Sign in with class login info. Change in def __init__ above
     py.sign_in( self.User, self.ApiKey )
+    print 'out of loop'
+    print 'self.Score2dComboTraces', 4, self.Score2dComboTraces
+    for ComboKey in self.Score2dComboTraces:
+      print 'plotting combination: ', ComboKey
+      print 'traces ', self.Score2dComboTraces[ComboKey]
+      data = self.Graph.Data(self.Score2dComboTraces[ComboKey])
+      ComboList = [ int(i) for i in ComboKey.split('_') ]
+      x = ComboList[0]
+      y = ComboList[1]
+      layout = self.Graph.Layout(
 
-    data = self.Graph.Data(self.ScoreTraces)
-    layout = self.Graph.Layout(
-
-        xaxis=self.Graph.XAxis(
-            title=Xaxis, 
-            showgrid=True,
-            zeroline=False
-        ),
-        yaxis=self.Graph.YAxis(
-            title=Yaxis, 
-            showgrid=True,
-            zeroline=False
-        )
-    )
-    fig = self.Graph.Figure(data=data, layout=layout)
-    plot_url = self.py.plot(fig, filename=PlotName)
+          xaxis=self.Graph.XAxis(
+              title=self.FxnNames[x], 
+              showgrid=True,
+              zeroline=False
+          ),
+          yaxis=self.Graph.YAxis(
+              title=self.FxnNames[y], 
+              showgrid=True,
+              zeroline=False
+          )
+      )
+      fig = self.Graph.Figure(data=data, layout=layout)
+      plot_url = self.py.plot(fig, filename=PlotName)
 
 
+sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
 # sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats', '-score', '-1.5' ]
 
 
@@ -211,8 +269,6 @@ def main(argv=None):
 
   if Args.name != '':
     Args.out = Args.out + ' '
-
-  NativePose = rosetta.pose_from_pdb( Args.native_pdb )
 
   RepeatLengths = []
   ProcessTags = {}
@@ -333,21 +389,21 @@ def main(argv=None):
   CstScore.set_weight(rosetta.angle_constraint, 5.0)
   CstScore.set_weight(rosetta.dihedral_constraint, 3.0)
 
-  # Add more score functions as wanted
   if Args.plot:
-    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, ScoreFxns=[ CstScore, Talaris ], FxnNames=[ 'ConstraintScore', 'Talaris2013' ], PerResidue=True )
+    ''' currently only works with two functions!!! '''
+    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, Args.native_pdb, ScoreFxns=[ CstScore, Talaris ], FxnNames=[ 'ConstraintScore', 'Talaris2013' ], PerResidue=True )
 
   XaxisSortingTuples = []
 
   for PoseGroup in AllGroups:
   # for PoseGroup in [SortedTuples]:
     if len(PoseGroup):
-      print 
-      print 'Group:', PoseGroup
+      # print 
+      # print 'Group:', PoseGroup
       Poses = [ PoseTuple[-1] for PoseTuple in PoseGroup ]
-      print PoseGroup
+      # print PoseGroup
       RepeatLength = PoseGroup[0][0]
-      print '\n'.join( [ Pose.pdb_info().name() for Pose in Poses ] ) 
+      # print '\n'.join( [ Pose.pdb_info().name() for Pose in Poses ] ) 
       # print 'Zero index pose tuple:'
       # print PoseGroup[0]
      
@@ -356,13 +412,16 @@ def main(argv=None):
         if Args.multi:
           Tag = TagByPdbName[GroupPdbName] 
           Plotter.score_poses( Poses, 1, Tag )
-    
-  Plotter.add_comparsion_threshold( NativePose, Talaris, [0, Plotter.MaxX] )
-  Plotter.plot_traces( PlotName='%s%s based %d res '%( Args.name, Args.native_pdb, RepeatLength ) )
+  
+  # return Plotter
+  Plotter.plot_2d_score_combinations()
+  print 'Plotter.Score2dComboTraces', 3, Plotter.Score2dComboTraces
 
-  # print 'Plotter.ScoreFunctionScoredPdbs'
-  # print Plotter.ScoreFunctionScoredPdbs
+  Plotter.draw_comparisons()
 
+  print 'plotting...'
+  Plotter.render_scatter_plot( PlotName='%s%s based %d res '%( Args.name, Args.native_pdb, RepeatLength ) )
+  
   ScoreFunctionScoreCutoffs = []
 
   for i, Name in enumerate( Plotter.FxnNames ):
@@ -415,13 +474,16 @@ def main(argv=None):
   #   print 'here', XaxisSortingTuples[-1]
   #   Xaxis = XaxisSortingTuples[-1][1]
   #   Plotter.add_comparsion_threshold( NativePose, Xaxis )
-  #   Plotter.plot_traces( PlotName='All %s%s based globed with %s'%(Args.name, Args.native_pdb, Args.pdb_glob) )
+  #   Plotter.render_scatter_plot( PlotName='All %s%s based globed with %s'%(Args.name, Args.native_pdb, Args.pdb_glob) )
 
 
 ###### sys.exit() CstGlober = (Pdb+'!').replace('.pdb!', '*cst')
 ###### CapCstName = re.sub(r'(.*).pdb$', r'\1.cst', CappedNamePdb)
 
 
-if __name__ == "__main__":
-  sys.exit(main())
+# if __name__ == "__main__":
+#   sys.exit(main())
 
+
+
+--
