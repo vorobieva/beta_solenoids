@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-# '''
+'''
 import numpy as np
 import subprocess
 import itertools
@@ -205,7 +205,7 @@ class plotly_plotter:
     print 'self.Score2dComboTraces', 4, self.Score2dComboTraces
 
 
-  def render_scatter_plot(self, PlotName='Unamed'):
+  def render_scatter_plot(self, PlotName=''):
     ''' Plot premade plotly traces. Used within plot_scores, but 
     can also be used on larger collection of traces '''
     # Import plotly for ploting 
@@ -222,6 +222,11 @@ class plotly_plotter:
       ComboList = [ int(i) for i in ComboKey.split('_') ]
       x = ComboList[0]
       y = ComboList[1]
+      if len(PlotName):
+        ComboName = '%s vs %s; %s'%(self.FxnNames[y], self.FxnNames[x], PlotName)
+      else:
+        ComboName = '%s vs %s; %s'%(self.FxnNames[y], self.FxnNames[x], PlotName)
+
       layout = self.Graph.Layout(
 
           xaxis=self.Graph.XAxis(
@@ -236,11 +241,10 @@ class plotly_plotter:
           )
       )
       fig = self.Graph.Figure(data=data, layout=layout)
-      plot_url = self.py.plot(fig, filename=PlotName)
+      plot_url = self.py.plot(fig, filename=ComboName)
 
 
-# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
-# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats', '-score', '-1.5' ]
+sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
 
 
 def main(argv=None):
@@ -250,13 +254,14 @@ def main(argv=None):
   ArgParser.add_argument('-pdb_glob', type=str, help=" pdb stem, start of globs for pdbs and csts ", required=True )    
   ArgParser.add_argument('-native_pdb', type=str, help=" pdb to compare designs against ", required=True )    
   ArgParser.add_argument('-out', type=str, help=" folder to move files to ", required=True )    
-  ArgParser.add_argument('-score', type=float, help=" select all structures with less than this REU / residue ", default=None )
+  # ArgParser.add_argument('-score', type=float, help=" select all structures with less than this REU / residue ", default=None )
   ArgParser.add_argument('-norm', type=int, help=" 0|(1) normalize scores by residue ", default=1 )
   # following args are for plotly:
   ArgParser.add_argument('-plot', type=int, help=" 0|(1) plot scores with plotly ", default=1 )
   ArgParser.add_argument('-plotly_id', type=str, help=" pdb stem, start of globs for pdbs and csts ", default="pylesharley") # required=True )    
   ArgParser.add_argument('-plotly_key', type=str, help=" pdb stem, start of globs for pdbs and csts ", default="cc5z4a8kst") # required=True )    
   ArgParser.add_argument('-name', type=str, help=" plot tag ", default='' )
+  ArgParser.add_argument('-and_or', type=str, help=" And/Or logic for score cutoffs. Default = 'and'  ", default='and' )
   ArgParser.add_argument('-multi', type=int, help=" 0|(1) plot different methods together on same plot ", default=1 )
   Args = ArgParser.parse_args()
   Pdbs = glob.glob( Args.pdb_glob )
@@ -267,8 +272,7 @@ def main(argv=None):
   if Args.out [-1] != '/':
     Args.out = Args.out + '/'
 
-  if Args.name != '':
-    Args.out = Args.out + ' '
+  Args.and_or = Args.and_or.lower()
 
   RepeatLengths = []
   ProcessTags = {}
@@ -382,16 +386,29 @@ def main(argv=None):
   # for last repeat length
   AllGroups.append(CurrentGroup)
 
-  # set up scorefunctions for plotting
+  ''' Build score functions here: '''
+
   Talaris = rosetta.getScoreFunction()
+
+  # This line returns a talaris function with all default weights set to 0
   CstScore = set_all_weights_zero( rosetta.getScoreFunction() )
   CstScore.set_weight(rosetta.atom_pair_constraint, 10.0)
   CstScore.set_weight(rosetta.angle_constraint, 5.0)
   CstScore.set_weight(rosetta.dihedral_constraint, 3.0)
 
+  HbondScore = set_all_weights_zero( rosetta.getScoreFunction() )
+  HbondScore.set_weight(rosetta.hbond_sr_bb, 1.170)
+  HbondScore.set_weight(rosetta.hbond_lr_bb, 1.170)
+  HbondScore.set_weight(rosetta.hbond_bb_sc, 1.170)
+  HbondScore.set_weight(rosetta.hbond_sc, 1.100)
+
   if Args.plot:
-    ''' currently only works with two functions!!! '''
-    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, Args.native_pdb, ScoreFxns=[ CstScore, Talaris ], FxnNames=[ 'ConstraintScore', 'Talaris2013' ], PerResidue=True )
+    if Args.norm:
+      PerRes = True
+    else:
+      PerRes = False
+    ''' Add and remove score functions here '''
+    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, Args.native_pdb, ScoreFxns=[ CstScore, Talaris, HbondScore ], FxnNames=[ 'ConstraintScore', 'Talaris2013', 'H-bond'], PerResidue=PerRes )
 
   XaxisSortingTuples = []
 
@@ -420,7 +437,11 @@ def main(argv=None):
   Plotter.draw_comparisons()
 
   print 'plotting...'
-  Plotter.render_scatter_plot( PlotName='%s%s based %d res '%( Args.name, Args.native_pdb, RepeatLength ) )
+  if len(Args.name):
+    Name = Args.Name
+  else:
+    Name = '%s based %d res '%( Args.native_pdb, RepeatLength )
+  Plotter.render_scatter_plot( PlotName=Name )
   
   ScoreFunctionScoreCutoffs = []
 
@@ -457,30 +478,7 @@ def main(argv=None):
   for Pdb in PdbsPassingAll:
     subprocess.check_output([ 'cp', Pdb, Args.out ])
 
-  #   if Args.score != None:
-  #     with open('%sScores.log'%Args.out, 'a') as Log:  
-  #       for PoseTuple in PoseGroup:
-          
-  #         print 'PoseTuple', PoseTuple
-  #         #### RepLen, Score, Pose
-  #         # if Score > Args.score:
-  #         #   break
-  #         # PdbName = Pose.pdb_info().name()
-  #         # subprocess.check_output([ 'cp', PdbName, Args.out ])
-  #         # print>>Log, '%s\t%.3f'%(PdbName, Score)
 
-  # if Args.multi:
-  #   XaxisSortingTuples.sort()
-  #   print 'here', XaxisSortingTuples[-1]
-  #   Xaxis = XaxisSortingTuples[-1][1]
-  #   Plotter.add_comparsion_threshold( NativePose, Xaxis )
-  #   Plotter.render_scatter_plot( PlotName='All %s%s based globed with %s'%(Args.name, Args.native_pdb, Args.pdb_glob) )
-
-
-###### sys.exit() CstGlober = (Pdb+'!').replace('.pdb!', '*cst')
-###### CapCstName = re.sub(r'(.*).pdb$', r'\1.cst', CappedNamePdb)
-
-
-if __name__ == "__main__":
-  sys.exit(main())
+# if __name__ == "__main__":
+#   sys.exit(main())
 
