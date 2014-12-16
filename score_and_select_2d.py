@@ -59,6 +59,8 @@ class plotly_plotter:
     # Later keyed with index of self.ScoreFxns
     self.ScoreFunctionScoredPdbs = {}
 
+    self.CstDict = {}
+
   def clear_traces(self):
     self.Score2dComboTraces = {}
 
@@ -75,9 +77,13 @@ class plotly_plotter:
     StemName = re.sub( r'(.*)\.pdb$', r'\1', PdbName )
     assert StemName != PdbName, ' re.sub for pdb stem failed '
 
+    # print 'entering while loop 1', StemName
     while len( glob.glob('%s.cst'%StemName) ) == 0:
       StemName = StemName[:-1]
+      assert len(StemName), 'No cst file found for %s'%PdbName
+
     assert len( glob.glob('%s.cst'%StemName) ) == 1, 'ambigous cst'
+    # print 'leaving while loop 1'
 
     CstName = glob.glob('%s.cst'%StemName)[0]
     return CstName
@@ -89,6 +95,8 @@ class plotly_plotter:
     
     if Cst == 1:
       CstNames = [ self.glob_cst_file(Pdb) for Pdb in self.PdbNames]
+      for i, Cst in enumerate(CstNames):
+        self.CstDict[self.PdbNames[i]] = Cst
       # print 
       # print 'self.PdbNames', self.PdbNames
       # print 'CstNames', CstNames
@@ -244,7 +252,9 @@ class plotly_plotter:
       plot_url = self.py.plot(fig, filename=ComboName)
 
 
-# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb', '-out', 'LowNrgRepeats' ]
+# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb' ]
+# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '3ult_Relax.pdb' ]
+# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '3ult_Relax.pdb', '-and_or', 'or' ]
 
 
 def main(argv=None):
@@ -253,7 +263,7 @@ def main(argv=None):
   ArgParser = argparse.ArgumentParser(description=" for plotting pdb scores and selecting subsets based on absolute or per residue scores ")
   ArgParser.add_argument('-pdb_glob', type=str, help=" pdb stem, start of globs for pdbs and csts ", required=True )    
   ArgParser.add_argument('-native_pdb', type=str, help=" pdb to compare designs against ", required=True )    
-  ArgParser.add_argument('-out', type=str, help=" folder to move files to ", required=True )    
+  # ArgParser.add_argument('-out', type=str, help=" folder to move files to ", required=True )    
   # ArgParser.add_argument('-score', type=float, help=" select all structures with less than this REU / residue ", default=None )
   ArgParser.add_argument('-norm', type=int, help=" 0|(1) normalize scores by residue ", default=1 )
   # following args are for plotly:
@@ -267,17 +277,17 @@ def main(argv=None):
   Pdbs = glob.glob( Args.pdb_glob )
   print 'globed %d pdbs'%len(Pdbs)
 
-  if not os.path.isdir(Args.out):
-    subprocess.check_output(['mkdir', Args.out])
-  if Args.out [-1] != '/':
-    Args.out = Args.out + '/'
-
   Args.and_or = Args.and_or.lower()
+
+  assert Args.and_or == 'and' or Args.and_or == 'or', " -and_or must equal 'and' or 'or' "
 
   RepeatLengths = []
   ProcessTags = {}
   TagList = []
   TagByPdbName = {}
+
+  # better to find out of native pdb is wrong before waiting for pdb scoring
+  Check = open(Args.native_pdb, 'r')
 
   # print ' first loop '
   OverlapStarts = []
@@ -443,41 +453,59 @@ def main(argv=None):
     Name = '%s based %d res '%( Args.native_pdb, RepeatLength )
   Plotter.render_scatter_plot( PlotName=Name )
   
-  ScoreFunctionScoreCutoffs = []
+  while 1:
 
-  for i, Name in enumerate( Plotter.FxnNames ):
-    while 1:
-      try:
-        Cutoff = float( raw_input('Enter cutoff value (maximum) for %s function: '%Name) ) 
-        break
-      except ValueError:
-        pass  
-    ScoreFunctionScoreCutoffs.append(Cutoff)
+    ScoreFunctionScoreCutoffs = []
+    for i, Name in enumerate( Plotter.FxnNames ):
+      while 1:
+        try:
+          Cutoff = float( raw_input('\tEnter cutoff value (maximum) for %s function: '%Name) ) 
+          break
+        except ValueError:
+          pass  
+      ScoreFunctionScoreCutoffs.append(Cutoff)
 
-  print 'Cutoff values set at:'
-  for i, Name in enumerate( Plotter.FxnNames ):
-    print Name, ScoreFunctionScoreCutoffs[i]
-    Plotter.ScoreFunctionScoredPdbs[i].sort()
+    print 'Cutoff values set at:'
+    for i, Name in enumerate( Plotter.FxnNames ):
+      # print Name, ScoreFunctionScoreCutoffs[i]
+      Plotter.ScoreFunctionScoredPdbs[i].sort()
 
-  PassingPdbs = []
-  for i, Name in enumerate( Plotter.FxnNames ):
-    PassThisFxn = []
-    Cutoff = ScoreFunctionScoreCutoffs[i]
-    print Plotter.ScoreFunctionScoredPdbs[i]
-    for Score, Pdb in Plotter.ScoreFunctionScoredPdbs[i]:
-      if Score <= Cutoff:
-        PassThisFxn.append(Pdb)
-      else:
-        break
-    PassingPdbs.append( PassThisFxn )
+    PassingPdbs = []
+    for i, Name in enumerate( Plotter.FxnNames ):
+      PassThisFxn = []
+      Cutoff = ScoreFunctionScoreCutoffs[i]
+      # print Plotter.ScoreFunctionScoredPdbs[i]
+      for Score, Pdb in Plotter.ScoreFunctionScoredPdbs[i]:
+        if Score <= Cutoff:
+          PassThisFxn.append(Pdb)
+        else:
+          break
+      PassingPdbs.append( PassThisFxn )
 
-  PdbsPassingAll = PassingPdbs[0]
-  for OtherSet in PassingPdbs[1:]:
-    PdbsPassingAll = list( set(PdbsPassingAll) & set(OtherSet) )
-  
-  for Pdb in PdbsPassingAll:
-    subprocess.check_output([ 'cp', Pdb, Args.out ])
+    PdbsPassingAll = PassingPdbs[0]
+    if Args.and_or == 'and':
+      for OtherSet in PassingPdbs[1:]:
+        PdbsPassingAll = list( set(PdbsPassingAll) & set(OtherSet) )
+    else:
+      for OtherSet in PassingPdbs[1:]:
+        PdbsPassingAll = list( set(PdbsPassingAll + OtherSet) )
+    
+    Outdir = raw_input( '\tEnter folder to copy pdbs that pass these thresholds (%s logic) to: '%Args.and_or ) 
 
+    if not os.path.isdir(Outdir):
+      subprocess.check_output(['mkdir', Outdir])
+    if Outdir [-1] != '/':
+      Outdir = Outdir + '/'
+
+    for Pdb in PdbsPassingAll:
+      subprocess.check_output([ 'cp', Pdb, Outdir ])
+      subprocess.check_output([ 'cp', Plotter.CstDict[Pdb], Outdir ])
+
+    Continue = str( raw_input( '\tEnter Y to add another set of selection threshold, or anything else to quit: ') ).upper()
+    if Continue == 'Y':
+      pass
+    else:
+      break
 
 if __name__ == "__main__":
   sys.exit(main())
