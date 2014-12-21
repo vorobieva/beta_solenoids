@@ -448,7 +448,7 @@ def main(argv=None):
 
   print 'plotting...'
   if len(Args.name):
-    Name = Args.Name
+    Name = Args.name
   else:
     Name = '%s based %d res '%( Args.native_pdb, RepeatLength )
   Plotter.render_scatter_plot( PlotName=Name )
