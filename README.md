@@ -32,7 +32,7 @@ generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
 
  Give pdb(s) with beta solenoid repeat. Uses Pyrosetta directly and via Daniel Silva's RMSD aligner function in solenoid_tools
  
-#generate_cst.py -pdbs RepeatPose.pdb
+#generate_cst.py 
 
 Makes cst file for each input pdb. For options see -h. Uses Pyrosetta directly and via SASA wrapper from Alex Ford's interface_fragment_matching for solvation calculation
 
