@@ -1,6 +1,12 @@
 #! /usr/bin/env python
 InfoString = ''' 
+expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
 
+!!! Be careful and considerate with this script as runs things in parrallel !!!
+optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
+OR
+!!! Now your also generating silent processes !!!
+nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 '''
 
 # '''
