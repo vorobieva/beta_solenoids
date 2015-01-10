@@ -10,6 +10,8 @@ source /work/pylesh/virtualenvs/dev/bin/activate
 
 # Main pipeline overview :
 
+Example starts with 3fy3.pdb, a rosetta friendly, relaxed pdb
+
 generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
 
 generate_cst.py -pdbs 3fy3.pdb
@@ -25,6 +27,8 @@ OR
 !!! Now your also generating silent processes !!!
 
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
+
+reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -thread 5
 
 #generate_backbones.py 
 
