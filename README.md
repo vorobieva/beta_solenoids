@@ -8,15 +8,30 @@ export PYTHONPATH=/work/pylesh/python_local.bak:$PYTHONPATH
 source /work/pylesh/virtualenvs/dev/bin/activate
 
 # Main pipeline:
-#generate_backbones.py -pdbs RepeatPose1.pdb RepeatPose2.pdb ... 
- given repeat pdbs 
- Uses Pyrosetta directly and via Daniel Silva's RMSD aligner function in solenoid_tools
+Short verison:
+generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+
+generate_cst.py -pdbs 3fy3.pdb
+
+expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
+
+!!! Be careful and considerate with this script as runs things in parrallel !!!
+optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
+OR
+!!! Now your also generating silent processes !!!
+nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
+
+#generate_backbones.py 
+generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+ Give pdb(s) with beta solenoid repeat. Uses Pyrosetta directly and via Daniel Silva's RMSD aligner function in solenoid_tools
  
 #generate_cst.py -pdbs RepeatPose.pdb
 Makes cst file for each input pdb. For options see -h. Uses Pyrosetta directly and via SASA wrapper from Alex Ford's interface_fragment_matching for solvation calculation
 By default, make contraints for all Nitrogen to Oxygen ( and O to O contacts with at least one hydrogen in the system ) and disulfides. 
  
  #expand_constraints.py
+ expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
+
  optional arguments:
   -h, --help            show this help message and exit
   -ref_pdb REF_PDB      reference pdb
@@ -55,8 +70,12 @@ optional arguments:
   -norm NORM       0|(1) normalize scores by residue
   -name NAME       plot tag
 
-# End of main pipeline
 
+# Misc other scripts
+
+# cst_to_pymol.py
+cst_to_pymol.py -cst 3fy3_All.cst
+use to visualize cst file in pymol (copy paste output into pymol session with pdb corresponding to cst file)
 
 # repeat_search.py
 Use to find repeat motifs involving particular residues, i.e. aromatics, charges, etc. Bias toward favored residues in a amino acid matirx like in matrix.tsv.
