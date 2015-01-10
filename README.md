@@ -14,6 +14,8 @@ Example starts with 3fy3.pdb, a rosetta friendly, relaxed pdb
 
 generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
 
+remove_redundant_structures.py -pdb _3fy3
+
 generate_cst.py -pdbs 3fy3.pdb
 
 expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
