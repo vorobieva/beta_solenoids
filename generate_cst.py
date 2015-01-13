@@ -348,9 +348,10 @@ def get_pose_constraints(Pose, MaxDist, MinPositionSeperation, SasaRadius, SasaS
 
 
 def main(argv=None):
-  if argv is None:
-    argv = sys.argv
-  
+  if argv != None:                                                             
+    sys.argv =[ sys.argv[0] ]+[ arg for arg in argv ]                          
+  print 'sys.argv', sys.argv
+
   ArgParser = argparse.ArgumentParser(description=' nc_cst_gen.py arguments ( -help ) %s'%InfoString)
   # Required arguments:
   ArgParser.add_argument('-pdbs', type=str, nargs='+', help=' input pdbs ', required=True)

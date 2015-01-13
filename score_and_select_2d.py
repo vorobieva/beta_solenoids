@@ -19,7 +19,7 @@ if '-h' not in sys.argv:
   from rosetta.protocols import grafting 
   # from repo 
   import solenoid_tools
-  from expand_constraints import set_all_weights_zero
+  from expand_cst import set_all_weights_zero
 
 # '''
 
@@ -80,7 +80,10 @@ class plotly_plotter:
     # print 'entering while loop 1', StemName
     while len( glob.glob('%s.cst'%StemName) ) == 0:
       StemName = StemName[:-1]
-      assert len(StemName), 'No cst file found for %s'%PdbName
+      try:
+        assert len(StemName), 'No cst file found for %s'%PdbName
+      except AssertionError:
+       return None
 
     assert len( glob.glob('%s.cst'%StemName) ) == 1, 'ambigous cst'
     # print 'leaving while loop 1'
@@ -92,18 +95,23 @@ class plotly_plotter:
     ''' Give a list of rosetta poses '''
 
     self.PdbNames = [ Pose.pdb_info().name() for Pose in Poses ] 
-    
-    if Cst == 1:
-      CstNames = [ self.glob_cst_file(Pdb) for Pdb in self.PdbNames]
+
+    if type(Cst) == str or Cst == 1:
+      if type(Cst) == str:
+        CstNames = [ Cst for Pdb in self.PdbNames ]
+      elif Cst == 1:
+        CstNames = [ self.glob_cst_file(Pdb) for Pdb in self.PdbNames]
+
       for i, Cst in enumerate(CstNames):
         self.CstDict[self.PdbNames[i]] = Cst
-      # print 
-      # print 'self.PdbNames', self.PdbNames
-      # print 'CstNames', CstNames
+
       for i, Pose in enumerate(Poses):
         # make constraint mover
         Constrainer = rosetta.ConstraintSetMover()
         # get constraints from file
+        # print CstNames[i]
+        if CstNames[i] == None:
+          return False
         Constrainer.constraint_file(CstNames[i])
         Constrainer.apply(Pose)
 
@@ -225,7 +233,7 @@ class plotly_plotter:
     print 'self.Score2dComboTraces', 4, self.Score2dComboTraces
     for ComboKey in self.Score2dComboTraces:
       print 'plotting combination: ', ComboKey
-      print 'traces ', self.Score2dComboTraces[ComboKey]
+      print 'traces: ', self.Score2dComboTraces[ComboKey]
       data = self.Graph.Data(self.Score2dComboTraces[ComboKey])
       ComboList = [ int(i) for i in ComboKey.split('_') ]
       x = ComboList[0]
@@ -249,36 +257,48 @@ class plotly_plotter:
           )
       )
       fig = self.Graph.Figure(data=data, layout=layout)
+      print 'assembled figure'
       plot_url = self.py.plot(fig, filename=ComboName)
+      print 'sent figure to plotly'
 
+# sys.argv = [ sys.argv[0], '-pdb_glob', 'A011__src144_163__151_170_rep40_3petA_2rASP_plusGLU_ladderASN_MetLeuCore_plusArgBkUpII_Relax00*.pdb', '-param', 'CA9.params', 'CO3.params', '-native', 'A011__src144_163__151_170_rep40_3petA_2rASP_plusGLU_ladderASN_MetLeuCore_plusArgBkUpII_SolutionState.pdb','-cst', 'A011__src144_163__151_170_rep20_3petA_2AspRow.cst', '-name', 'interface_test']
+# score_and_select_2d.py -pdb_glob 'A011__src144_163__151_170_rep*Relax*pdb' -native A011__src144_163__151_170_rep40_3petA_2rASP_plusGLU_ladderASN_MetLeuCore_plusArgBkUpII_SolutionState.pdb -cst A011__src144_163__151_170_rep20_3petA_2AspRow.cst
 
-# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '1M8N_Relax.pdb' ]
-# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '3ult_Relax.pdb' ]
-# sys.argv = [ sys.argv[0], '-pdb_glob', 'src*_Relax*Relax.pdb', '-native_pdb', '3ult_Relax.pdb', '-and_or', 'or' ]
-
-
-def main(argv=None):
-  if argv is None:
-    argv = sys.argv
+def main(ExtraResidues=0, ipython=0):
+  # Required args
   ArgParser = argparse.ArgumentParser(description=" for plotting pdb scores and selecting subsets based on absolute or per residue scores ")
   ArgParser.add_argument('-pdb_glob', type=str, help=" pdb stem, start of globs for pdbs and csts ", required=True )    
-  ArgParser.add_argument('-native_pdb', type=str, help=" pdb to compare designs against ", required=True )    
-  # ArgParser.add_argument('-out', type=str, help=" folder to move files to ", required=True )    
-  # ArgParser.add_argument('-score', type=float, help=" select all structures with less than this REU / residue ", default=None )
+  ArgParser.add_argument('-native', type=str, help=" pdb to compare designs against ", required=True )    
+  # Default args
+  ArgParser.add_argument('-cst', type=str, help=" to provide cst manually, will apply to all globed pdbs!!! ", default=False )
+  ArgParser.add_argument('-param', type=str, nargs='+', help=" params ", default=[] )
   ArgParser.add_argument('-norm', type=int, help=" 0|(1) normalize scores by residue ", default=1 )
+
   # following args are for plotly:
+  # change if you use this script!!!
+  ArgParser.add_argument('-plotly_id', type=str, help=" ", default="pylesharley") # required=True )    
+  ArgParser.add_argument('-plotly_key', type=str, help="  ", default="cc5z4a8kst") # required=True )    
   ArgParser.add_argument('-plot', type=int, help=" 0|(1) plot scores with plotly ", default=1 )
-  ArgParser.add_argument('-plotly_id', type=str, help=" pdb stem, start of globs for pdbs and csts ", default="pylesharley") # required=True )    
-  ArgParser.add_argument('-plotly_key', type=str, help=" pdb stem, start of globs for pdbs and csts ", default="cc5z4a8kst") # required=True )    
   ArgParser.add_argument('-name', type=str, help=" plot tag ", default='' )
   ArgParser.add_argument('-and_or', type=str, help=" And/Or logic for score cutoffs. Default = 'and'  ", default='and' )
   ArgParser.add_argument('-multi', type=int, help=" 0|(1) plot different methods together on same plot ", default=1 )
+  
   Args = ArgParser.parse_args()
   Pdbs = glob.glob( Args.pdb_glob )
   print 'globed %d pdbs'%len(Pdbs)
 
-  Args.and_or = Args.and_or.lower()
+  if ExtraResidues == 0 and len(Args.param) > 0:
+    try: 
+      ExtraParams = rosetta.Vector1( Args.param )
+      ExtraResidues = rosetta.generate_nonstandard_residue_set( ExtraParams )
+    except:
+      ExtraParams = rosetta.Vector1( Args.param )
+      ExtraResidues = rosetta.generate_nonstandard_residue_set( ExtraParams )
+    ### for ipython mode
+    if ipython: 
+      return ExtraResidues
 
+  Args.and_or = Args.and_or.lower()
   assert Args.and_or == 'and' or Args.and_or == 'or', " -and_or must equal 'and' or 'or' "
 
   RepeatLengths = []
@@ -287,7 +307,7 @@ def main(argv=None):
   TagByPdbName = {}
 
   # better to find out of native pdb is wrong before waiting for pdb scoring
-  Check = open(Args.native_pdb, 'r')
+  Check = open(Args.native, 'r')
 
   # print ' first loop '
   OverlapStarts = []
@@ -309,7 +329,10 @@ def main(argv=None):
   # print 'ShortestOverlap', ShortestOverlap
   
   for Pdb in Pdbs:
-    RepeatLength = int(re.sub(r'^.*rep(\d+).*pdb$', r'\1', Pdb))
+    try:
+      RepeatLength = int(re.sub(r'^.*rep(\d+).*pdb$', r'\1', Pdb))
+    except ValueError:
+      RepeatLength = 0
     # SourceStart = int(re.sub(r'^.*src(\d+).*pdb$', r'\1', Pdb))
     assert RepeatLength != Pdb, " regular expression extraction of 'rep' (repeat length) value failed on %s "%Pdb 
     # assert SourceStart != Pdb and RepeatLength != Pdb, ' regular expression extraction of rep or src value failed on %s '%Pdb 
@@ -418,7 +441,7 @@ def main(argv=None):
     else:
       PerRes = False
     ''' Add and remove score functions here '''
-    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, Args.native_pdb, ScoreFxns=[ CstScore, Talaris, HbondScore ], FxnNames=[ 'ConstraintScore', 'Talaris2013', 'H-bond'], PerResidue=PerRes )
+    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, Args.native, ScoreFxns=[ CstScore, Talaris, HbondScore ], FxnNames=[ 'ConstraintScore', 'Talaris2013', 'H-bond'], PerResidue=PerRes )
 
   XaxisSortingTuples = []
 
@@ -438,7 +461,11 @@ def main(argv=None):
         GroupPdbName = PoseGroup[0][-1].pdb_info().name()
         if Args.multi:
           Tag = TagByPdbName[GroupPdbName] 
-          Plotter.score_poses( Poses, 1, Tag )
+          
+          if Args.cst:
+            Plotter.score_poses( Poses, Args.cst, Tag )
+          else:
+            Plotter.score_poses( Poses, 1, Tag )
   
   # return Plotter
   Plotter.plot_2d_score_combinations()
@@ -450,7 +477,7 @@ def main(argv=None):
   if len(Args.name):
     Name = Args.name
   else:
-    Name = '%s based %d res '%( Args.native_pdb, RepeatLength )
+    Name = '%s based %d res '%( Args.native, RepeatLength )
   Plotter.render_scatter_plot( PlotName=Name )
   
   while 1:
@@ -499,7 +526,8 @@ def main(argv=None):
 
     for Pdb in PdbsPassingAll:
       subprocess.check_output([ 'cp', Pdb, Outdir ])
-      subprocess.check_output([ 'cp', Plotter.CstDict[Pdb], Outdir ])
+      if Plotter.CstDict[Pdb] != None:
+        subprocess.check_output([ 'cp', Plotter.CstDict[Pdb], Outdir ])
 
     Continue = str( raw_input( '\tEnter Y to add another set of selection threshold, or anything else to quit: ') ).upper()
     if Continue == 'Y':

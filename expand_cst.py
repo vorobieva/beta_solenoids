@@ -52,51 +52,54 @@ class constraint_extrapolator:
 
     for iLine, Line in enumerate(self.CstLines):
       Line = Line.replace('\n','')
-      LineList = Line.split()
-      if Line.startswith('AtomPair'):
-        CstType, Name1, Res1, Name2, Res2 = tuple( LineList[:5] )
-        AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ) ]
-        ConstraintParameters = LineList[5:]
+      if len(Line):
+        LineList = Line.split()
+        # print 'Line', Line
+        if Line.startswith('AtomPair'):
+          CstType, Name1, Res1, Name2, Res2 = tuple( LineList[:5] )
+          AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ) ]
+          ConstraintParameters = LineList[5:]
 
-      elif Line.startswith('Angle'):
-        CstType, Name1, Res1, Name2, Res2, Name3, Res3 = tuple( LineList[:7] )
-        AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ), (Name3, int(Res3) ) ]
-        ConstraintParameters = LineList[7:]
+        elif Line.startswith('Angle'):
+          CstType, Name1, Res1, Name2, Res2, Name3, Res3 = tuple( LineList[:7] )
+          AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ), (Name3, int(Res3) ) ]
+          ConstraintParameters = LineList[7:]
 
-      elif Line.startswith('Dihedral'):        
-        CstType, Name1, Res1, Name2, Res2, Name3, Res3, Name4, Res4  = tuple( LineList[:9] )
-        AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ), (Name3, int(Res3) ), (Name4, int(Res4) ) ]
-        ConstraintParameters = LineList[9:]
-      
-      elif Line.startswith('#'):  
-        pass
-      
-      else:
-        assert len(Line) < 1, ' Cst line... \n%s\n ...not recognized '%Line
+        elif Line.startswith('Dihedral'):        
+          CstType, Name1, Res1, Name2, Res2, Name3, Res3, Name4, Res4  = tuple( LineList[:9] )
+          AtomResidueCoords = [ (Name1, int(Res1) ), (Name2, int(Res2) ), (Name3, int(Res3) ), (Name4, int(Res4) ) ]
+          ConstraintParameters = LineList[9:]
+        
+        elif Line.startswith('#'):  
+          print 'Comment?: ', Line
+          pass
+        
+        else:
+          assert len(Line) < 1, ' Cst line... \n%s\n ...not recognized '%Line
 
-      for Atom, Residue in AtomResidueCoords:
-        # these check for residue entry in constraint dict
-        try:
-          check = self.Cst[Residue]
-        except KeyError:
-          self.Cst[Residue] = {}
+        for Atom, Residue in AtomResidueCoords:
+          # these check for residue entry in constraint dict
+          try:
+            check = self.Cst[Residue]
+          except KeyError:
+            self.Cst[Residue] = {}
 
-        # PartnerAtomResidues = []
-        # for OtherAtom, OtherResidue in AtomResidueCoords:
-        #   if OtherAtom == Atom and OtherResidue == Residue:
-        #     continue
-        #   else:
-        #     PartnerAtomResidues.append( (OtherAtom, OtherResidue) )
+          # PartnerAtomResidues = []
+          # for OtherAtom, OtherResidue in AtomResidueCoords:
+          #   if OtherAtom == Atom and OtherResidue == Residue:
+          #     continue
+          #   else:
+          #     PartnerAtomResidues.append( (OtherAtom, OtherResidue) )
 
-        # add atom name entries for residue subdict as needed
-        try:
-          self.Cst[Residue][Atom].append( (AtomResidueCoords, ConstraintParameters, iLine+1, LineList[0]) )
-        except KeyError:
-          self.Cst[Residue][Atom] = [ (AtomResidueCoords, ConstraintParameters, iLine+1, LineList[0]) ] 
+          # add atom name entries for residue subdict as needed
+          try:
+            self.Cst[Residue][Atom].append( (AtomResidueCoords, ConstraintParameters, iLine+1, LineList[0]) )
+          except KeyError:
+            self.Cst[Residue][Atom] = [ (AtomResidueCoords, ConstraintParameters, iLine+1, LineList[0]) ] 
 
       # return AtomResidueCoords
   def output_cst(self, ConstraintTuples, FileName):
-    with open(FileName, 'w') as CstFile:  
+    with open(FileName, 'a') as CstFile:  
       for CstTuple in ConstraintTuples:
         CstString = self.reassemble_cst( CstTuple[3], CstTuple[0], CstTuple[1] )
         print>>CstFile, CstString 
@@ -493,7 +496,7 @@ def main(argv=None):
     argv = sys.argv
   
   # Arg block
-  ArgParser = argparse.ArgumentParser(description=' expand_constraints.py ( -help ) %s'%InfoString)
+  ArgParser = argparse.ArgumentParser(description=' expand_cst.py ( -help ) %s'%InfoString)
   # Required args
   ArgParser.add_argument('-ref_pdb', type=str, help=' reference pdb ', required=True)
   ArgParser.add_argument('-ref_cst', type=str, help=' corresponding to reference pdb ', required=True)
