@@ -116,6 +116,11 @@ optional arguments:
   -name NAME       plot tag
   
 
+#reattach_caps.py
+reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax
+To trim off residues (i.e. not use full length protein before/after duplicated region as cap) provide args like:
+reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -n_trim 48 -c_trim 24 -step 24 
+the above example will trim off 0, 24, and 48 residues off the end of the n-terminal cap and 0 & 24 residues off the beginning of the c-terminal cap
 
 # Misc other scripts
 
