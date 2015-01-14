@@ -20,14 +20,12 @@ generate_cst.py -pdbs 3fy3.pdb
 
 expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
 
-!!! Be careful and considerate with this script as runs things in parrallel !!!
-
+!!!Be careful and considerate this, it runs things in parrallel!!!
 optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
 
 OR
 
-!!! Now your also generating silent processes !!!
-
+!!!Now your also generating silent processes!!!
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 
 reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -thread 5
