@@ -25,11 +25,16 @@ OR
 
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 
-reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -thread 5
+5) score_and_select_2d.py -pdb_glob 'src*_3fy3*.pdb' -native 1M8N_Relax.pdb -name 1m8n_ref
+
+6) reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -thread 1
+
+7) score_and_select_2d.py -pdb_glob 'src*_3fy3*Cap*.pdb' -native 1M8N_Relax.pdb -name 1m8n_ref
 
 #generate_backbones.py 
 
-generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+ generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+
 
  Give pdb(s) with beta solenoid repeat. Uses Pyrosetta directly and via Daniel Silva's RMSD aligner function in solenoid_tools
  
