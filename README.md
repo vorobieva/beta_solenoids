@@ -1,27 +1,24 @@
 
-beta_solenoids
-==============
-
-to use easily :
-
-export PYTHONPATH=/work/pylesh/python_local.bak:$PYTHONPATH
-
-source /work/pylesh/virtualenvs/dev/bin/activate
-
 # Main pipeline overview :
 
-Example starts with 3fy3.pdb, a rosetta friendly, relaxed pdb
+#Example starts with 
 
-generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+#3fy3.pdb
 
-remove_redundant_structures.py -pdb _3fy3
+a rosetta compatible, relaxed pdb
 
-generate_cst.py -pdbs 3fy3.pdb
+run in order by #)
 
-expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
+1)  generate_cst.py -pdbs 3fy3.pdb
+
+1)  generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+
+2)  remove_redundant_structures.py -pdb _3fy3
+
+3)  expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
 
 !!!Be careful and considerate this, it runs things in parrallel!!!
-optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
+4)  optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
 
 OR
 
@@ -172,5 +169,14 @@ optional arguments:
                         
   -sasa_probe_radius    probe radius for sasa calculations
   
+  
+  # Baker lab usage
+  
+Simplest (I think) use in-lab as follows:
+
+export PYTHONPATH=/work/pylesh/python_local.bak:$PYTHONPATH
+
+source /work/pylesh/virtualenvs/dev/bin/activate
+
 
 
