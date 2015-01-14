@@ -21,7 +21,7 @@ run in order indicated by #) id
 
 OR
 
-!!!Now your also generating silent processes!!!
+!!!Now you are also generating silent processes!!!
 
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 
