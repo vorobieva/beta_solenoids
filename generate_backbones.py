@@ -337,9 +337,12 @@ def detect_and_expand_repeats(InputTuple):
 
 
 def main(argv=None):
-  if argv is None:
-    argv = sys.argv
-  
+  # if argv is None:
+  #   argv = sys.argv
+  if argv != None:                                                             
+    sys.argv =[ sys.argv[0] ]+[ arg for arg in argv ]                          
+  # print 'sys.argv', sys.argv
+    
   ArgParser = argparse.ArgumentParser(description=' generate_backbones.py ( -help ) %s'%InfoString)
   
   # Required arguments:

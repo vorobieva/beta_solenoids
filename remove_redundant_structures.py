@@ -25,8 +25,11 @@ if '-h' not in sys.argv:
 # sys.argv = [ sys.argv[0], '-pdb_stem', '_2qiv_Relax' ]
 
 def main(argv=None):
-  if argv is None:
-    argv = sys.argv
+  # if argv is None:
+  #   argv = sys.argv
+  if argv != None:                                                             
+    sys.argv =[ sys.argv[0] ]+[ arg for arg in argv ]                          
+  # print 'sys.argv', sys.argv
   
   ArgParser = argparse.ArgumentParser(description=" args for optimize_repeat_structures ")
   ArgParser.add_argument('-pdb_stem', type=str, help=" pdb stem, start of globs for pdbs and csts ", required=True )    

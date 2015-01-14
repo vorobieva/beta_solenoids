@@ -265,17 +265,17 @@ class plotly_plotter:
 # score_and_select_2d.py -pdb_glob 'A011__src144_163__151_170_rep*Relax*pdb' -native A011__src144_163__151_170_rep40_3petA_2rASP_plusGLU_ladderASN_MetLeuCore_plusArgBkUpII_SolutionState.pdb -cst A011__src144_163__151_170_rep20_3petA_2AspRow.cst
 
 def main(ExtraResidues=0, ipython=0):
-  # Required args
+  ### Required args
   ArgParser = argparse.ArgumentParser(description=" for plotting pdb scores and selecting subsets based on absolute or per residue scores ")
   ArgParser.add_argument('-pdb_glob', type=str, help=" pdb stem, start of globs for pdbs and csts ", required=True )    
   ArgParser.add_argument('-native', type=str, help=" pdb to compare designs against ", required=True )    
-  # Default args
+  ### Default args
   ArgParser.add_argument('-cst', type=str, help=" to provide cst manually, will apply to all globed pdbs!!! ", default=False )
   ArgParser.add_argument('-param', type=str, nargs='+', help=" params ", default=[] )
   ArgParser.add_argument('-norm', type=int, help=" 0|(1) normalize scores by residue ", default=1 )
 
-  # following args are for plotly:
-  # change if you use this script!!!
+  ### following args are for plotly:
+  ### change if you use this script!!!
   ArgParser.add_argument('-plotly_id', type=str, help=" ", default="pylesharley") # required=True )    
   ArgParser.add_argument('-plotly_key', type=str, help="  ", default="cc5z4a8kst") # required=True )    
   ArgParser.add_argument('-plot', type=int, help=" 0|(1) plot scores with plotly ", default=1 )
@@ -435,13 +435,19 @@ def main(ExtraResidues=0, ipython=0):
   HbondScore.set_weight(rosetta.hbond_bb_sc, 1.170)
   HbondScore.set_weight(rosetta.hbond_sc, 1.100)
 
+  Disulfide = set_all_weights_zero( rosetta.getScoreFunction() )
+  Disulfide.set_weight(rosetta.dslf_fa13, 1.0)
+
   if Args.plot:
     if Args.norm:
       PerRes = True
     else:
       PerRes = False
     ''' Add and remove score functions here '''
-    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, Args.native, ScoreFxns=[ CstScore, Talaris, HbondScore ], FxnNames=[ 'ConstraintScore', 'Talaris2013', 'H-bond'], PerResidue=PerRes )
+    Plotter = plotly_plotter( Args.plotly_id, Args.plotly_key, Args.native,
+                              ScoreFxns=[ CstScore, Talaris, HbondScore, Disulfide ],
+                              FxnNames=[ 'ConstraintScore', 'Talaris2013', 'H-bond', 'Disulfide' ],
+                              PerResidue=PerRes )
 
   XaxisSortingTuples = []
 

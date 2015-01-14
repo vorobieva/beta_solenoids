@@ -161,7 +161,7 @@ def main(argv=None):
   ArgParser.add_argument('-pdb_stem', type=str, help=" pdb stem, start of globs for pdbs and csts ", required=True )    
   ArgParser.add_argument('-thread', type=int, help=" number of threads to run simultaneously ", default=15 ) # with default, there can be only one !    
   Args = ArgParser.parse_args()
-  
+
   Pdbs = glob.glob('*%s.pdb'%Args.pdb_stem)
   CstHash = { }
   for Pdb in Pdbs:

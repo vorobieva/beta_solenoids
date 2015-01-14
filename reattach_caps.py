@@ -77,6 +77,9 @@ def cap_pdb_make_cst( RepeatPdbFileName, RepeatCstFileName, ReferencePdb, Refere
     except RuntimeError:
       print 'Requested end of n-terminal cap, %d, beyond range of reference protein. '%NcapLastRes
       continue    
+    except OverflowError:
+      print 'Requested end of n-terminal cap, %d, beyond range of reference protein. '%NcapLastRes
+      continue    
 
     try:
       assert NcapPose.n_residue() > 4
@@ -170,6 +173,10 @@ def cap_pdb_make_cst( RepeatPdbFileName, RepeatCstFileName, ReferencePdb, Refere
       except RuntimeError:
         print 'Requested start of c-terminal, %d, beyond range of reference protein. '%CcapFirstRes
         continue        
+      except OverflowError:
+        print 'Requested start of c-terminal, %d, beyond range of reference protein. '%CcapFirstRes
+        continue   
+
       # rosetta.dump_pdb(CcapPose, 'Ccap.pdb')
 
       try:

@@ -492,8 +492,11 @@ def set_all_weights_zero(ScoreFunction):
 
 
 def main(argv=None):
-  if argv is None:
-    argv = sys.argv
+  # if argv is None:
+  #   argv = sys.argv
+  if argv != None:                                                             
+    sys.argv =[ sys.argv[0] ]+[ arg for arg in argv ]                          
+  # print 'sys.argv', sys.argv
   
   # Arg block
   ArgParser = argparse.ArgumentParser(description=' expand_cst.py ( -help ) %s'%InfoString)
