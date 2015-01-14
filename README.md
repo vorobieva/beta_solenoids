@@ -1,40 +1,54 @@
 
-beta_solenoids
-==============
+#Example starts with:
 
-to use easily :
+#3fy3.pdb
 
-export PYTHONPATH=/work/pylesh/python_local.bak:$PYTHONPATH
+A rosetta compatible, relaxed pdb. Run in order indicated by #) id
 
-source /work/pylesh/virtualenvs/dev/bin/activate
 
-# Main pipeline overview :
+Easy way (skip to step 4 after running)
 
-Example starts with 3fy3.pdb, a rosetta friendly, relaxed pdb
+1-3) make_repeat_structures.py
 
-generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
 
-remove_redundant_structures.py -pdb _3fy3
+Slow way (potentially more control)
 
-generate_cst.py -pdbs 3fy3.pdb
+1)  generate_cst.py -pdbs 3fy3.pdb
 
-expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
+1)  generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
 
-!!! Be careful and considerate with this script as runs things in parrallel !!!
+2)  remove_redundant_structures.py -pdb_stem _3fy3
 
-optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
+3)  expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
+
+
+!!!Be careful and considerate this spawns 10 processes!!!
+
+4)  optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
 
 OR
 
-!!! Now your also generating silent processes !!!
+!!!Now you are also generating silent processes!!!
 
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 
-reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -thread 5
+
+5) score_and_select_2d.py -pdb_glob 'src*_3fy3*.pdb' -native 1M8N_Relax.pdb -name 1m8n_ref
+
+
+6) reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -thread 1
+
+
+7) score_and_select_2d.py -pdb_glob 'src*_3fy3*Cap*.pdb' -native 1M8N_Relax.pdb -name 1m8n_ref
+
+
+
+
 
 #generate_backbones.py 
 
-generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+ generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
+
 
  Give pdb(s) with beta solenoid repeat. Uses Pyrosetta directly and via Daniel Silva's RMSD aligner function in solenoid_tools
  
@@ -64,13 +78,13 @@ By default, make contraints for all Nitrogen to Oxygen ( and O to O contacts wit
  
 # optimize_repeat_structures.py
 
-!!! Be careful and considerate with this script as runs things in parrallel !!!
+!!! Be careful and considerate  !!!
 
 optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
 
 OR
 
-!!! Now your also generating silent processes !!!
+!!! Generating silent processes !!!
 
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 
@@ -174,5 +188,14 @@ optional arguments:
                         
   -sasa_probe_radius    probe radius for sasa calculations
   
+  
+  # Baker lab usage
+  
+Simplest (I think) use in-lab as follows:
+
+export PYTHONPATH=/work/pylesh/python_local.bak:$PYTHONPATH
+
+source /work/pylesh/virtualenvs/dev/bin/activate
+
 
 
