@@ -3,17 +3,19 @@
 
 #3fy3.pdb
 
-a rosetta compatible, relaxed pdb
+A rosetta compatible, relaxed pdb. Run in order indicated by #) id
 
-run in order indicated by #) id
 
 1)  generate_cst.py -pdbs 3fy3.pdb
 
 1)  generate_backbones.py -pdbs 3fy3.pdb -repeat 4 -max_turns_per_repeat 2
 
+
 2)  remove_redundant_structures.py -pdb _3fy3
 
+
 3)  expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
+
 
 !!!Be careful and considerate this spawns 10 processes!!!
 
@@ -25,11 +27,18 @@ OR
 
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 
+
 5) score_and_select_2d.py -pdb_glob 'src*_3fy3*.pdb' -native 1M8N_Relax.pdb -name 1m8n_ref
+
 
 6) reattach_caps.py -ref_pdb 3fy3_Relax.pdb -ref_cst 3fy3_Relax_All.cst -repeat_tag _3fy3_Relax -thread 1
 
+
 7) score_and_select_2d.py -pdb_glob 'src*_3fy3*Cap*.pdb' -native 1M8N_Relax.pdb -name 1m8n_ref
+
+
+
+
 
 #generate_backbones.py 
 
