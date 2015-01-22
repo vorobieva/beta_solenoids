@@ -350,7 +350,7 @@ def rmsd_2_np_arrays_rosetta(crds1, crds2):
   tVec_xyzV.x=tVec[0]
   tVec_xyzV.y=tVec[1]
   tVec_xyzV.z=tVec[2]
-  return np.sqrt(rmsd_sq), rMtx_xyzM, tVec_xyzV
+  return (np.sqrt(rmsd_sq), rMtx_xyzM, tVec_xyzV)
 
 def parse_motif_pose_coords(Pose):
    # Coordinates keyed with position 

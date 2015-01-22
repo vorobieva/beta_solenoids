@@ -434,53 +434,8 @@ def main(argv=None):
     with open(CstName, 'w') as CstFile:
       print>>CstFile, '\n'.join(DisulfAllConstraints)
 
+
 if __name__ == "__main__":
   sys.exit(main())
 
 
-
-# def consolidate_repeats(ListOfRepeatPositions):
-#   ''' takes lists of repeat positions (based on xyz coords) and returns subsets that split the pose longest equal residue number repeat chains '''  
-#   TandemIndenticalSpacings = {} #{0:[]}
-  
-#   for RepeatPositions in ListOfRepeatPositions:
-#     RepeatPositions = RepeatPositions[:]
-#     RepeatSpacings = [ RepeatPositions[i+1] - RepeatPositions[i] for i in range(len(RepeatPositions)-1) ]
-
-#     # appending buffer value for added last repeat chain to TandemIndenticalSpacings
-#     RepeatSpacings.append(0)
-#     RepeatPositions.append(0)
-
-#     LastSpacing = 0
-#     RepeatChain = [RepeatSpacings[0]]
-#     Start = RepeatPositions[0]
-    
-#     for i, Spacing in enumerate(RepeatSpacings):
-#       if Spacing == LastSpacing:
-#         RepeatChain.append(Spacing)
-#       else:
-#         TandemIndenticalSpacings[Start] = RepeatChain
-#         Start = RepeatPositions[i]
-#         RepeatChain = [RepeatSpacings[i]]
-
-#       LastSpacing = Spacing
-  
-#   MaxNumberStart = 0
-#   EqualLengthStarts = []
-
-#   for Start in TandemIndenticalSpacings:
-#     if len(TandemIndenticalSpacings[Start]) > len(TandemIndenticalSpacings[MaxNumberStart]):
-#       MaxNumberStart = Start
-#       EqualLengthStarts = []
-#     elif len(TandemIndenticalSpacings[Start]) == len(TandemIndenticalSpacings[MaxNumberStart]):
-#       EqualLengthStarts.append(Start)
-
-#   for RepeatStart in EqualLengthStarts:
-#     try:
-#       assert TandemIndenticalSpacings[MaxNumberStart][0] == TandemIndenticalSpacings[RepeatStart][0], ' different repeat spacings have same max copy number ' 
-#     # This is explicted (semi) silenced to prevent a large job from stopping at some later date
-#     except AssertionError:
-#       print '\n\n\n LOOKOUT ERROR: multiple different repeat spacings have max copy number. \n\n\n'
-
-#   MaxNumberRepeatStarts = [MaxNumberStart] + EqualLengthStarts
-#   return MaxNumberRepeatStarts, TandemIndenticalSpacings

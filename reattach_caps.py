@@ -90,7 +90,7 @@ def cap_pdb_make_cst( RepeatPdbFileName, RepeatCstFileName, ReferencePdb, Refere
     # rosetta.dump_pdb(NcapPose, 'Ncap.pdb')
     NcapLength = NcapPose.n_residue()
     
-    NcapOverhangPositions = [ Position for Position in range(NcapLength-3, NcapLength+1) ]
+    NcapOverhangPositions = [ Position for Position in range( NcapLength-3, NcapLength+1 ) ]
     # print NcapOverhangPositions
     NcapOverhangArray = generate_backbones.get_residue_array( NcapPose, NcapOverhangPositions )
     
@@ -100,17 +100,17 @@ def cap_pdb_make_cst( RepeatPdbFileName, RepeatCstFileName, ReferencePdb, Refere
     # print RepStartOverhangArray
 
     RMSD, rMtx, tVec = solenoid_tools.rmsd_2_np_arrays_rosetta( NcapOverhangArray, RepStartOverhangArray )
-    rosetta.Pose.apply_transform_Rx_plus_v(TrimmedRepeatPose, rMtx, tVec)
+    rosetta.Pose.apply_transform_Rx_plus_v( TrimmedRepeatPose, rMtx, tVec )
     # rosetta.dump_pdb( TrimmedRepeatPose, 'TrimmedShifted.pdb' )
     
     try:
-      NcapPlusRepeatPose, RMSD, NcapCorrespondingResidues = generate_backbones.fuse(NcapPose, TrimmedRepeatPose)
+      NcapPlusRepeatPose, RMSD, NcapCorrespondingResidues = generate_backbones.fuse( NcapPose, TrimmedRepeatPose )
     except AssertionError:
-      print 'Not enough structural similarity to attach n-terminal cap ending at %d; skipping '%NcapLastRes
+      print ' Not enough structural similarity to attach n-terminal cap ending at %d; skipping '%NcapLastRes
       continue
 
     # print 'Ncap attachment RMSD %f'%RMSD
-    # rosetta.dump_pdb( NcapPlusRepeatPose, 'NcapPlusRepeat.pdb' )
+    rosetta.dump_pdb( NcapPlusRepeatPose, 'NcapPlusRepeat.pdb' )
     NcapPlusRepeatPose.pdb_info( rosetta.core.pose.PDBInfo( NcapPlusRepeatPose ) )    
 
     RepeatCstExtrapolator = expand_cst.constraint_extrapolator(RepeatCstFileName)
@@ -120,6 +120,7 @@ def cap_pdb_make_cst( RepeatPdbFileName, RepeatCstFileName, ReferencePdb, Refere
     ''' Shift repeat unit constraints to accomadiate numbering with n-cap length'''
     Redundict = {}
     RepeatCsts = []
+    
     for RepeatPosition in range(1, RepeatPose.n_residue()+1 ):
       # print 'RepeatPosition', RepeatPosition
       try:
@@ -194,7 +195,7 @@ def cap_pdb_make_cst( RepeatPdbFileName, RepeatCstFileName, ReferencePdb, Refere
       
       RMSD, rMtx, tVec = solenoid_tools.rmsd_2_np_arrays_rosetta( RepEndOverhangArray, CcapOverhangArray )
       rosetta.Pose.apply_transform_Rx_plus_v(CcapPose, rMtx, tVec)
-      # rosetta.dump_pdb( CcapPose, 'CcapPose.pdb' )
+      rosetta.dump_pdb( CcapPose, 'CcapPose.pdb' )
 
       try:
         CappedRepeatPose, RMSD, CcapCorrespondingResidues = generate_backbones.fuse(NcapPlusRepeatPose, CcapPose)
