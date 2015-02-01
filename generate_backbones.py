@@ -114,10 +114,10 @@ def fuse(Pose1, Pose2, SubsetSize=2):
   return FusionPose, BestRMSD, CorrespondingResidues
 
 
-def get_residue_array(Pose, Residues):
+def get_residue_array(Pose, Residues, Atoms=['N','C','O','CA']):
   CoordList = [] 
   for Residue in Residues:
-    for AtomName in ['N','C','O','CA']:
+    for AtomName in Atoms:
       CoordList.append( list(Pose.residue(Residue).xyz(AtomName)) )
   return np.array(CoordList)
 
