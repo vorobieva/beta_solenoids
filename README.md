@@ -22,13 +22,13 @@ Slow way (potentially more control)
 3)  expand_cst.py -ref_pdb 3fy3.pdb -ref_cst 3fy3_All.cst -repeat_pdb_tag _3fy3
 
 
-!!!Be careful and considerate this spawns 10 processes!!!
+Be careful and considerate this spawns 10 processes
 
 4)  optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10
 
 OR
 
-!!!Now you are also generating silent processes!!!
+Now you are also generating silent processes
 
 nohup optimize_repeat_structures.py -pdb_stem _3fy3 -thread 10 > log.txt &
 
